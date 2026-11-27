@@ -126,7 +126,7 @@ if [ -n "${CF_TUNNEL_TOKEN:-}" ]; then
   CLEAN_TOKEN="$(printf '%s' "${CF_TUNNEL_TOKEN}" | tr -d '\r\n' | awk '{print $NF}')"
   umask 077
   printf '%s' "${CLEAN_TOKEN}" > "${APP_DIR}/.cf_token"
-  pkill -f "cloudflared tunnel" >/dev/null 2>&1 || true
+  pkill -x cloudflared >/dev/null 2>&1 || true
   TUNNEL_TOKEN="$(cat "${APP_DIR}/.cf_token")" \
     nohup cloudflared tunnel --no-autoupdate run </dev/null >> "${APP_DIR}/logs/cloudflared.log" 2>&1 &
   echo $! > "${APP_DIR}/cloudflared.pid"
