@@ -673,13 +673,85 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 767px) {
   .adm-page {
-    padding: 80px 16px 48px;
+    padding: calc(78px + env(safe-area-inset-top)) 14px calc(52px + env(safe-area-inset-bottom));
   }
 
-  .adm-kpi-grid,
+  .adm-back-btn {
+    min-height: 40px;
+  }
+
+  .adm-header-actions {
+    width: 100%;
+  }
+
+  .adm-header-actions button {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .adm-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .adm-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .adm-tab-btn {
+    flex-shrink: 0;
+    height: 42px;
+  }
+
+  .adm-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .adm-kpi-card {
+    padding: 14px;
+  }
+
+  .adm-kpi-card strong {
+    font-size: 20px;
+  }
+
+  .adm-panel,
+  .adm-list-card,
+  .adm-gate-card {
+    padding: 16px;
+  }
+
+  .adm-panel-head {
+    flex-wrap: wrap;
+  }
+
+  .adm-field input,
+  .adm-field select,
+  .adm-search,
+  .adm-select,
+  .adm-verif-actions input {
+    min-height: 46px;
+    font-size: 16px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .adm-primary-btn,
+  .adm-secondary-btn {
+    min-height: 44px;
+  }
+
   .adm-stock-form {
     grid-template-columns: 1fr;
+  }
+
+  .adm-verif-actions button {
+    flex: 1 1 100%;
   }
 }

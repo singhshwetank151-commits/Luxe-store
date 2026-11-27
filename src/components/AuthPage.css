@@ -368,13 +368,47 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .auth-page {
-    padding: 80px 20px 48px;
+    padding: calc(78px + env(safe-area-inset-top)) 16px calc(52px + env(safe-area-inset-bottom));
+  }
+
+  .auth-back-btn {
+    min-height: 40px;
+    margin-bottom: 16px;
+  }
+
+  .auth-card {
+    padding: 22px 18px;
   }
 
   .auth-form-grid,
   .auth-dossier-grid {
     grid-template-columns: 1fr;
+  }
+
+  .auth-field input,
+  .auth-field select {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .auth-google-btn,
+  .auth-submit-btn,
+  .auth-secondary-btn,
+  .auth-danger-btn {
+    min-height: 48px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .auth-profile-btns,
+  .auth-actions-row {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .auth-setup-hint code {
+    word-break: break-all;
   }
 }

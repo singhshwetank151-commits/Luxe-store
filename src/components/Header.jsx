@@ -43,7 +43,7 @@ export function Header() {
         </a>
         <a
           href="#about"
-          className="nav-link"
+          className="nav-link nav-link-about"
           onClick={(e) => e.preventDefault()}
         >
           ABOUT
@@ -63,7 +63,7 @@ export function Header() {
         )}
         <button
           type="button"
-          className="icon-btn"
+          className="icon-btn header-search-btn"
           aria-label="Search"
           onClick={() => navigate('/collection')}
         >
