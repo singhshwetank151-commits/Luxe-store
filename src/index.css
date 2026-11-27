@@ -491,6 +491,12 @@ body,
   }
 }
 
+/* Mobile-only left header panel (completely hidden on PC & tablet) */
+.mobile-nav-backdrop,
+.mobile-nav-drawer {
+  display: none;
+}
+
 /* Mobile Adjustments (Phones only — PC & Tablet untouched) */
 @media (max-width: 767px) {
   button,
@@ -504,52 +510,62 @@ body,
     top: 0;
     left: 0;
     right: 0;
-    padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+    z-index: 110;
+    height: calc(58px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 14px 0;
     gap: 8px;
-    background: rgba(121, 12, 18, 0.9);
+    background: rgba(121, 12, 18, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 239, 219, 0.12);
+    transition: background-color 0.25s ease;
+  }
+
+  .site-header.is-menu-open {
+    background: rgba(96, 8, 17, 0.98);
   }
 
   .logo-grid {
-    gap: 4px;
-    padding: 8px 6px;
+    width: 40px;
+    height: 40px;
+    padding: 10px;
+    gap: 5px;
+    align-content: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: rgba(255, 239, 219, 0.08);
+    border: 1px solid rgba(255, 239, 219, 0.2);
     flex-shrink: 0;
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.25s ease, border-color 0.25s ease;
+  }
+
+  .logo-grid.is-open {
+    transform: rotate(45deg);
+    background: rgba(255, 239, 219, 0.16);
+    border-color: rgba(255, 239, 219, 0.42);
+  }
+
+  .logo-grid.is-open .logo-dot:last-child {
+    background-color: var(--cta-red);
   }
 
   .logo-dot {
-    width: 6.5px;
-    height: 6.5px;
+    width: 6px;
+    height: 6px;
+    transition: background-color 0.25s ease;
   }
 
-  .nav-links {
-    position: static;
-    transform: none;
-    gap: 14px;
-    margin-right: auto;
-    margin-left: 6px;
-  }
-
-  .nav-link {
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.7px;
-    padding: 10px 2px;
-  }
-
-  .nav-link.is-active::after {
-    transform: scaleX(1);
-  }
-
+  .nav-links,
   .nav-link-about,
-  .header-search-btn {
+  .header-search-btn,
+  .header-desktop-only {
     display: none;
   }
 
   .header-actions {
     gap: 8px;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
   .icon-btn {
@@ -569,18 +585,156 @@ body,
     right: 7px;
   }
 
-  .header-auth-btn {
-    height: 36px;
-    padding: 0 12px;
-    gap: 6px;
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+  /* Connected Left-Side Header Piece */
+  .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 104;
+    background: rgba(18, 2, 4, 0.56);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.26s ease;
   }
 
-  .header-auth-btn svg {
-    width: 15px;
-    height: 15px;
+  .mobile-nav-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobile-nav-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: calc(58px + env(safe-area-inset-top));
+    left: 0;
+    z-index: 108;
+    width: min(76vw, 276px);
+    max-height: calc(100dvh - 58px - env(safe-area-inset-top) - 16px);
+    overflow-y: auto;
+    background: linear-gradient(180deg, rgba(96, 8, 17, 0.98) 0%, rgba(65, 5, 11, 0.99) 100%);
+    border-right: 1px solid rgba(255, 239, 219, 0.18);
+    border-bottom: 1px solid rgba(255, 239, 219, 0.18);
+    border-bottom-right-radius: 20px;
+    box-shadow: 14px 20px 44px rgba(14, 1, 3, 0.62);
+    transform: translateX(-105%);
+    opacity: 0.6;
+    pointer-events: none;
+    transition:
+      transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.24s ease;
+  }
+
+  .mobile-nav-drawer.is-open {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobile-nav-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid rgba(255, 239, 219, 0.1);
+  }
+
+  .mobile-nav-brand {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    letter-spacing: 0.9px;
+    color: var(--text-cream);
+  }
+
+  .mobile-nav-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: rgba(255, 239, 219, 0.08);
+    border: 1px solid rgba(255, 239, 219, 0.16);
+    color: var(--text-cream);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .mobile-nav-list {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 10px 12px;
+    gap: 4px;
+  }
+
+  .mobile-nav-item {
+    position: relative;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: rgba(255, 239, 219, 0.84);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 1.1px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .mobile-nav-item:active {
+    background: rgba(255, 239, 219, 0.1);
+  }
+
+  .mobile-nav-item.is-active {
+    background: rgba(255, 239, 219, 0.12);
+    border-color: rgba(255, 239, 219, 0.22);
+    color: var(--text-cream);
+  }
+
+  .mobile-nav-item.is-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background-color: var(--cta-red);
+  }
+
+  .mobile-nav-badge {
+    margin-left: auto;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background-color: var(--cta-red);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 22px;
+    text-align: center;
+  }
+
+  .mobile-nav-item .account-active-inline-dot {
+    margin-left: auto;
+  }
+
+  .mobile-nav-foot {
+    padding: 12px 16px 14px;
+    border-top: 1px solid rgba(255, 239, 219, 0.1);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 1.6px;
+    color: rgba(255, 239, 219, 0.48);
   }
 
   .offline-banner {
