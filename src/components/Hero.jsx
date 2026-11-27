@@ -1,6 +1,7 @@
 import { SocialIcons } from './SocialIcons';
 import { GradientRing3D } from './GradientRing3D';
 import { useRouter } from '../context/storeHooks';
+import { withBase } from '../lib/basePath';
 
 export function Hero() {
   const { navigate } = useRouter();
@@ -44,7 +45,7 @@ export function Hero() {
       {/* Oversized Floating Angled Watch Product Photography */}
       <div className="hero-watch-container">
         <img
-          src="/watch.png"
+          src={withBase('/watch.png')}
           alt="Silver mechanical skeleton chronograph luxury wristwatch"
           className="hero-watch-img"
         />

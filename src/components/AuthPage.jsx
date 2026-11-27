@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { LogOut, Edit3, Check, ArrowLeft, UserCheck, ExternalLink, ShoppingBag, Trash2 } from 'lucide-react';
 import { useAuth, useCart, useRouter } from '../context/storeHooks';
+import { withBase } from '../lib/basePath';
 import {
   ALLOWED_FINISH_OPTIONS,
   consumePostLoginRedirect,
@@ -344,7 +345,7 @@ export function AuthPage() {
                 {googleSetupNeeded && (
                   <p className="auth-setup-hint">
                     Enable <strong>Google</strong> with your Google Cloud Client ID &amp; Secret and
-                    add <code>{window.location.origin}/account</code> to Redirect URLs:{' '}
+                    add <code>{window.location.origin}{withBase('/account')}</code> to Redirect URLs:{' '}
                     <a href={SUPABASE_PROVIDERS_URL} target="_blank" rel="noreferrer">
                       Open Supabase Auth Providers <ExternalLink size={14} strokeWidth={1.5} />
                     </a>

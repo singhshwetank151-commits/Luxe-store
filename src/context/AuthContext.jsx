@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { withBase } from '../lib/basePath';
 import { isSupabaseConfigured, supabase, supabaseKey, supabaseUrl } from '../lib/supabase';
 import { AuthContext } from './storeHooks';
 import {
@@ -189,7 +190,7 @@ export function AuthProvider({ children }) {
         supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/account`,
+            redirectTo: `${window.location.origin}${withBase('/account')}`,
             queryParams: {
               access_type: 'offline',
               prompt: 'select_account',

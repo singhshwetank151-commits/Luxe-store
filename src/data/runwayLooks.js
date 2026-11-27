@@ -1,9 +1,11 @@
+import { withBase } from '../lib/basePath.js';
+
 export const RUNWAY_LOOKS = [
   {
     id: 'look-01',
     lookNumber: '01',
     title: 'Maison Burgundy Edition',
-    modelImage: '/products/watch-burgundy-skeleton.png',
+    modelImage: withBase('/products/watch-burgundy-skeleton.png'),
     modelAlt: 'Maison Burgundy Edition 41mm crimson ceramic bezel skeleton chronograph',
     productIds: [
       'chronograph-burgundy-edition',
@@ -15,7 +17,7 @@ export const RUNWAY_LOOKS = [
     id: 'look-02',
     lookNumber: '02',
     title: 'Aurelia 18K Gold Skeleton',
-    modelImage: '/products/watch-gold-skeleton.png',
+    modelImage: withBase('/products/watch-gold-skeleton.png'),
     modelAlt: 'Aurelia 18K Gold Skeleton 41mm yellow gold mechanical chronograph',
     productIds: [
       'chronograph-gold-skeleton',
@@ -27,7 +29,7 @@ export const RUNWAY_LOOKS = [
     id: 'look-03',
     lookNumber: '03',
     title: 'Rose Atelier Chronograph',
-    modelImage: '/products/watch-rosegold-skeleton.png',
+    modelImage: withBase('/products/watch-rosegold-skeleton.png'),
     modelAlt: 'Rose Atelier Chronograph 40mm 18K rose gold openworked edition',
     productIds: [
       'chronograph-rosegold-skeleton',
@@ -39,7 +41,7 @@ export const RUNWAY_LOOKS = [
     id: 'look-04',
     lookNumber: '04',
     title: 'Sovereign Silver Skeleton',
-    modelImage: '/products/watch-silver-skeleton.png',
+    modelImage: withBase('/products/watch-silver-skeleton.png'),
     modelAlt: 'Sovereign Silver Skeleton 41mm brushed stainless-steel chronograph',
     productIds: [
       'chronograph-silver-skeleton',
@@ -51,7 +53,7 @@ export const RUNWAY_LOOKS = [
     id: 'look-05',
     lookNumber: '05',
     title: 'Nocturne Obsidian PVD',
-    modelImage: '/products/watch-obsidian-skeleton.png',
+    modelImage: withBase('/products/watch-obsidian-skeleton.png'),
     modelAlt: 'Nocturne Obsidian PVD 41mm titanium skeleton timepiece',
     productIds: [
       'chronograph-obsidian-skeleton',
@@ -63,7 +65,7 @@ export const RUNWAY_LOOKS = [
     id: 'look-06',
     lookNumber: '06',
     title: 'Imperial Two-Tone Gold',
-    modelImage: '/products/watch-twotone-skeleton.png',
+    modelImage: withBase('/products/watch-twotone-skeleton.png'),
     modelAlt: 'Imperial Two-Tone Gold 41mm steel and 18K gold chronograph',
     productIds: [
       'chronograph-twotone-skeleton',
@@ -75,7 +77,7 @@ export const RUNWAY_LOOKS = [
     id: 'look-07',
     lookNumber: '07',
     title: 'Monarch Tachymeter Steel',
-    modelImage: '/products/watch-chronograph-macro.png',
+    modelImage: withBase('/products/watch-chronograph-macro.png'),
     modelAlt: 'Monarch Tachymeter Steel 42mm fluted bezel mechanical chronograph',
     productIds: [
       'chronograph-tachymeter-macro',

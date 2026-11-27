@@ -1,5 +1,6 @@
 import { Search, CircleUserRound, ShoppingBasket } from 'lucide-react';
 import { useAuth, useCart, useRouter } from '../context/storeHooks';
+import { withBase } from '../lib/basePath';
 
 export function Header() {
   const { route, navigate } = useRouter();
@@ -27,14 +28,14 @@ export function Header() {
 
       <nav className="nav-links" aria-label="Main Navigation">
         <a
-          href="/"
+          href={withBase('/')}
           className={`nav-link ${route.view === 'home' ? 'is-active' : ''}`}
           onClick={(e) => handleLinkClick(e, '/')}
         >
           HOME
         </a>
         <a
-          href="/collection"
+          href={withBase('/collection')}
           className={`nav-link ${route.view === 'collection' ? 'is-active' : ''}`}
           onClick={(e) => handleLinkClick(e, '/collection')}
         >

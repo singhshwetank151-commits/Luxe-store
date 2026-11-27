@@ -1,3 +1,5 @@
+import { withBase } from '../lib/basePath.js';
+
 export const PRODUCTS = [
   {
     id: 'chronograph-silver-skeleton',
@@ -7,7 +9,7 @@ export const PRODUCTS = [
     category: 'Mechanical Skeleton',
     price: 14800,
     formattedPrice: '$14,800',
-    image: '/products/watch-silver-skeleton.png',
+    image: withBase('/products/watch-silver-skeleton.png'),
     description:
       'Hand-finished 316L brushed stainless-steel case framing an open-worked calibre with column-wheel chronograph architecture, luminous indices, and integrated link bracelet.',
     specs: ['Calibre LS-901 Automatic', '72-Hour Power Reserve', 'Sapphire Crystal Caseback', '100m Water Resistance'],
@@ -24,7 +26,7 @@ export const PRODUCTS = [
     category: 'Chronographs',
     price: 16200,
     formattedPrice: '$16,200',
-    image: '/products/watch-chronograph-macro.png',
+    image: withBase('/products/watch-chronograph-macro.png'),
     description:
       'Precision-milled notched tachymeter bezel paired with a multi-layered matte obsidian dial, gunmetal guilloche subdials, and solid H-link steel bracelet.',
     specs: ['Calibre LS-940 Chrono', 'Notched Steel Bezel', 'Triple Subdial Layout', '100m Water Resistance'],
@@ -41,7 +43,7 @@ export const PRODUCTS = [
     category: 'Precious Metals',
     price: 32500,
     formattedPrice: '$32,500',
-    image: '/products/watch-gold-skeleton.png',
+    image: withBase('/products/watch-gold-skeleton.png'),
     description:
       'Sculpted in solid 18K yellow gold with satin-brushed bracelet links and hand-bevelled skeletonized bridges revealing the twin-barrel escapement.',
     specs: ['18K Solid Yellow Gold', 'Calibre LS-980 Skeleton', '68-Hour Power Reserve', 'Exhibition Caseback'],
@@ -57,7 +59,7 @@ export const PRODUCTS = [
     category: 'Precious Metals',
     price: 29900,
     formattedPrice: '$29,900',
-    image: '/products/watch-rosegold-skeleton.png',
+    image: withBase('/products/watch-rosegold-skeleton.png'),
     description:
       'Warm 18K rose gold alloy housing an architectural skeleton movement with anthracite chronograph counters and articulated fold-over deployment clasp.',
     specs: ['18K Rose Gold Case', 'Column-Wheel Chrono', 'Anti-Reflective Sapphire', '50m Water Resistance'],
@@ -73,7 +75,7 @@ export const PRODUCTS = [
     category: 'Limited Editions',
     price: 18400,
     formattedPrice: '$18,400',
-    image: '/products/watch-obsidian-skeleton.png',
+    image: withBase('/products/watch-obsidian-skeleton.png'),
     description:
       'Micro-blasted grade-5 titanium finished in deep obsidian PVD, contrasted by exposed rhodium-plated gear trains and Super-LumiNova baton hands.',
     specs: ['Grade-5 Titanium PVD', 'Openworked Calibre', '70-Hour Reserve', '100m Water Resistance'],
@@ -89,7 +91,7 @@ export const PRODUCTS = [
     category: 'Runway Exclusives',
     price: 21600,
     formattedPrice: '$21,600',
-    image: '/products/watch-burgundy-skeleton.png',
+    image: withBase('/products/watch-burgundy-skeleton.png'),
     description:
       'Signature Luxe Store runway exclusive pairing a deep crimson-burgundy ceramic tachymeter bezel with brushed stainless steel and an open-heart skeleton dial.',
     specs: ['Crimson Ceramic Bezel', 'Calibre LS-915 Skeleton', 'Numbered Runway Piece', '100m Water Resistance'],
@@ -105,7 +107,7 @@ export const PRODUCTS = [
     category: 'Precious Metals',
     price: 24900,
     formattedPrice: '$24,900',
-    image: '/products/watch-twotone-skeleton.png',
+    image: withBase('/products/watch-twotone-skeleton.png'),
     description:
       'Brushed stainless steel paired with solid 18K gold center links, fluted pushers, and tachymeter bezel framing an open-worked skeleton movement.',
     specs: ['Steel & 18K Gold Bracelet', 'Calibre LS-930 Chrono', '72-Hour Reserve', '100m Water Resistance'],
@@ -121,7 +123,7 @@ export const PRODUCTS = [
     category: 'Haute Horlogerie',
     price: 24200,
     formattedPrice: '$24,200',
-    image: '/products/watch-movement-dial.png',
+    image: withBase('/products/watch-movement-dial.png'),
     description:
       'Focused horological showcase highlighting hand-engraved skeletonized bridges, ruby jewel bearings, and exposed mainspring barrel architecture.',
     specs: ['Hand-Finished Bridges', '28,800 vph Frequency', 'Ruby Jewel Bearings', 'Swiss Certified'],

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { stripBase, withBase } from '../lib/basePath';
 import { isSafeRoutePath } from '../lib/security';
 import { RouterContext } from './storeHooks';
 
 function normalizeRoute(pathname, hash) {
-  const path = pathname && pathname !== '/' ? pathname : '';
+  const stripped = stripBase(pathname);
+  const path = stripped && stripped !== '/' ? stripped : '';
   if (path.startsWith('/collection') || hash === '#collection') {
     return { view: 'collection', productId: null };
   }
@@ -55,11 +57,12 @@ export function RouterProvider({ children }) {
 
   const navigate = useCallback((to, options = {}) => {
     const target = isSafeRoutePath(to) ? to.trim() : '/';
-    if (window.location.pathname !== target) {
+    const browserPath = withBase(target);
+    if (window.location.pathname !== browserPath) {
       if (options.replace) {
-        window.history.replaceState({}, '', target);
+        window.history.replaceState({}, '', browserPath);
       } else {
-        window.history.pushState({}, '', target);
+        window.history.pushState({}, '', browserPath);
       }
     }
     setRoute(normalizeRoute(target, ''));
