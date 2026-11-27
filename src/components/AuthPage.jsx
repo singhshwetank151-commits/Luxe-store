@@ -335,8 +335,8 @@ export function AuthPage() {
             <span className="auth-eyebrow">Luxe Store Private Client</span>
             <h1 className="auth-title">Sign in</h1>
             <p className="auth-subtitle">
-              Sign in with Google to unlock your client profile, saved delivery details, and
-              concierge checkout.
+              Sign in with Google to manage your client profile, saved delivery details, and
+              concierge reservations.
             </p>
 
             {authError && (
@@ -347,7 +347,7 @@ export function AuthPage() {
                     Enable <strong>Google</strong> with your Google Cloud Client ID &amp; Secret and
                     add <code>{window.location.origin}{withBase('/account')}</code> to Redirect URLs:{' '}
                     <a href={SUPABASE_PROVIDERS_URL} target="_blank" rel="noreferrer">
-                      Open Supabase Auth Providers <ExternalLink size={14} strokeWidth={1.5} />
+                      Open Supabase Auth Providers <ExternalLink size={16} strokeWidth={1.5} />
                     </a>
                   </p>
                 )}
@@ -495,7 +495,7 @@ export function AuthPage() {
                     setConfirmDeleteOpen(true);
                   }}
                 >
-                  <Trash2 size={15} strokeWidth={1.5} />
+                  <Trash2 size={16} strokeWidth={1.5} />
                   <span>Delete account</span>
                 </button>
               )}

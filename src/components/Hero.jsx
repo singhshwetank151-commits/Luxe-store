@@ -8,41 +8,35 @@ export function Hero() {
 
   return (
     <main className="hero-section">
-      {/* Back half of 3D swirling gradient ring (passes behind editorial text) */}
+      {/* Subtle static horological chapter ring behind the watch */}
       <GradientRing3D layer="back" />
 
       {/* Left Brand Heading & CTA */}
       <section className="hero-left">
+        <p className="hero-eyebrow">Swiss-inspired skeleton horology</p>
         <h1 className="hero-title">
           <span>Luxe</span>
           <span>Store</span>
         </h1>
-        <button
-          type="button"
-          className="shop-now-btn"
-          onClick={() => navigate('/collection')}
-        >
-          SHOP NOW
-        </button>
+        <div className="hero-actions">
+          <button
+            type="button"
+            className="shop-now-btn"
+            onClick={() => navigate('/collection')}
+          >
+            Shop collection
+          </button>
+        </div>
       </section>
 
       {/* Right Editorial Copy */}
       <section className="hero-editorial">
         <p className="editorial-text">
-          EXPERIENCE THE TIMELESS
-          <br />
-          BEAUTY OF OUR
-          <br />
-          MECHANICAL SKELETON
-          <br />
-          LUXURY WATCHES
+          Openworked mechanical chronographs in 316L steel, titanium, and 18K gold
         </p>
       </section>
 
-      {/* Front half of 3D swirling gradient ring (sweeps in front of editorial text) */}
-      <GradientRing3D layer="front" />
-
-      {/* Oversized Floating Angled Watch Product Photography */}
+      {/* Centerpiece Watch Product Photography */}
       <div className="hero-watch-container">
         <img
           src={withBase('/watch.png')}
@@ -53,18 +47,6 @@ export function Hero() {
 
       {/* Bottom-Left Social Icons */}
       <SocialIcons />
-
-      {/* Bottom-Right Floating Contact Button */}
-      <button
-        type="button"
-        className="contact-fab"
-        aria-label="Contact Us"
-        onClick={() => {}}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.57 3.58a1 1 0 0 1-.25 1.01l-2.2 2.2z" />
-        </svg>
-      </button>
     </main>
   );
 }

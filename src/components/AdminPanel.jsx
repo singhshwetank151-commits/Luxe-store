@@ -707,7 +707,7 @@ export function AdminPanel() {
         <header className="adm-header">
           <div>
             <button type="button" className="adm-back-btn" onClick={() => navigate('/collection')}>
-              <ArrowLeft size={15} strokeWidth={1.5} />
+              <ArrowLeft size={16} strokeWidth={1.5} />
               <span>Storefront</span>
             </button>
             <div className="adm-header-badges">
@@ -725,7 +725,7 @@ export function AdminPanel() {
               disabled={loadingData}
               onClick={triggerRefresh}
             >
-              <RefreshCw size={15} className={loadingData ? 'adm-spin' : ''} />
+              <RefreshCw size={16} strokeWidth={1.5} className={loadingData ? 'adm-spin' : ''} />
               <span>{loadingData ? 'Refreshing...' : 'Refresh'}</span>
             </button>
             <button
@@ -736,7 +736,7 @@ export function AdminPanel() {
                 navigate('/admin', { replace: true });
               }}
             >
-              <LogOut size={15} />
+              <LogOut size={16} strokeWidth={1.5} />
               <span>Sign out</span>
             </button>
           </div>
@@ -775,7 +775,7 @@ export function AdminPanel() {
                 className={`adm-tab-btn ${activeTab === tab.id ? 'is-active' : ''}`}
                 onClick={() => setActiveTab(tab.id)}
               >
-                <Icon size={15} strokeWidth={1.6} />
+                <Icon size={16} strokeWidth={1.5} />
                 <span>{tab.label}</span>
                 {pendingVerifs > 0 && <span className="adm-tab-count">{pendingVerifs}</span>}
               </button>

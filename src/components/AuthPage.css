@@ -1,9 +1,9 @@
 .auth-page {
   min-height: 100dvh;
   width: 100%;
-  background-color: #810d18;
-  color: #fff0dc;
-  padding: 96px clamp(20px, 4vw, 48px) 64px;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  padding: 96px 32px 64px;
 }
 
 .auth-container {
@@ -14,7 +14,7 @@
 .auth-back-btn {
   background: transparent;
   border: none;
-  color: rgba(255, 240, 220, 0.78);
+  color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -23,11 +23,11 @@
   cursor: pointer;
   margin-bottom: 24px;
   padding: 4px 0;
-  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: color 160ms var(--ease-out);
 }
 
 .auth-back-btn:hover {
-  color: #fff0dc;
+  color: var(--text-primary);
 }
 
 .auth-back-btn:focus-visible,
@@ -36,15 +36,15 @@
 .auth-secondary-btn:focus-visible,
 .auth-field input:focus-visible,
 .auth-field select:focus-visible {
-  outline: 2px solid #fff0dc;
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
 
 .auth-card {
-  background-color: #650912;
-  border: 1px solid rgba(255, 240, 220, 0.1);
-  border-radius: 12px;
-  padding: clamp(24px, 4vw, 40px);
+  background-color: var(--surface-deep);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  padding: 32px;
   max-width: 480px;
   margin: 0 auto;
 }
@@ -146,32 +146,32 @@
   min-height: 44px;
   padding: 0 12px;
   scroll-margin-bottom: 120px;
-  background-color: #810d18;
-  border: 1px solid rgba(255, 240, 220, 0.14);
-  border-radius: 8px;
-  color: #fff0dc;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-page);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: 14px;
   outline: none;
-  transition: border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color 160ms var(--ease-out);
 }
 
 .auth-field input::placeholder {
-  color: rgba(255, 240, 220, 0.44);
+  color: var(--text-muted);
 }
 
 .auth-field input:focus,
 .auth-field select:focus {
-  border-color: rgba(255, 240, 220, 0.52);
+  border-color: var(--border-strong);
 }
 
 .auth-error {
   padding: 12px 16px;
   margin-bottom: 16px;
-  background-color: rgba(245, 43, 48, 0.12);
-  border: 1px solid rgba(245, 43, 48, 0.55);
-  border-radius: 8px;
-  color: #fff0dc;
+  background-color: rgba(229, 72, 77, 0.14);
+  border: 1px solid rgba(229, 72, 77, 0.5);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -179,7 +179,7 @@
 .auth-setup-hint {
   margin-top: 8px;
   font-size: 12px;
-  color: rgba(255, 240, 220, 0.86);
+  color: var(--text-secondary);
 }
 
 .auth-setup-hint code {
@@ -190,7 +190,7 @@
 }
 
 .auth-setup-hint a {
-  color: #fff0dc;
+  color: var(--text-primary);
   font-weight: 500;
   text-decoration: underline;
   display: inline-flex;
@@ -205,8 +205,8 @@
   padding: 12px 16px;
   margin-bottom: 20px;
   background-color: rgba(255, 240, 220, 0.08);
-  border: 1px solid rgba(255, 240, 220, 0.18);
-  border-radius: 8px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
   font-size: 13px;
 }
 
@@ -220,20 +220,22 @@
 .auth-submit-btn {
   height: 44px;
   padding: 0 24px;
-  background-color: #f52b30;
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
+  background-color: var(--text-primary);
+  color: #360409;
+  border: 1px solid var(--text-primary);
+  border-radius: var(--radius-control);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition:
-    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
 }
 
 .auth-submit-btn:hover:not(:disabled) {
-  background-color: #e02227;
+  background-color: #ffffff;
+  border-color: #ffffff;
 }
 
 .auth-submit-btn:active:not(:disabled) {

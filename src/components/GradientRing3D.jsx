@@ -1,108 +1,71 @@
-import { useId } from 'react';
-
-function RingDefs({ prefix }) {
-  return (
-    <defs>
-      {/* Main vibrant pink -> coral-red -> golden-amber gradient */}
-      <linearGradient id={`${prefix}-body`} x1="85%" y1="5%" x2="15%" y2="95%">
-        <stop offset="0%" stopColor="#ff148a" />
-        <stop offset="28%" stopColor="#e8195b" />
-        <stop offset="58%" stopColor="#ee4326" />
-        <stop offset="84%" stopColor="#e48a28" />
-        <stop offset="100%" stopColor="#d49535" />
-      </linearGradient>
-
-      {/* Glossy tubular specular highlight */}
-      <linearGradient id={`${prefix}-shine`} x1="80%" y1="0%" x2="20%" y2="100%">
-        <stop offset="0%" stopColor="#ff9bd2" stopOpacity="0.65" />
-        <stop offset="45%" stopColor="#ff9a76" stopOpacity="0.28" />
-        <stop offset="100%" stopColor="#ffe196" stopOpacity="0.45" />
-      </linearGradient>
-
-      {/* Soft blur for 3D cylindrical shading */}
-      <filter id={`${prefix}-tube-blur`} x="-10%" y="-10%" width="120%" height="120%">
-        <feGaussianBlur stdDeviation="3.5" />
-      </filter>
-
-      {/* Feathered mask for seamless front-layer transition with zero hard seam */}
-      <linearGradient id={`${prefix}-fade-grad`} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#000000" />
-        <stop offset="47%" stopColor="#000000" />
-        <stop offset="53%" stopColor="#ffffff" />
-        <stop offset="100%" stopColor="#ffffff" />
-      </linearGradient>
-      <mask id={`${prefix}-front-mask`}>
-        <rect x="-40" y="-20" width="760" height="460" fill={`url(#${prefix}-fade-grad)`} />
-      </mask>
-    </defs>
-  );
-}
-
-function TorusGeometry({ prefix, isFront }) {
-  return (
-    <>
-      {/* Outer dark bevel shadow only on the unbroken back layer */}
-      {!isFront && (
-        <ellipse
-          cx="340"
-          cy="214"
-          rx="285"
-          ry="118"
-          fill="none"
-          stroke="rgba(42, 2, 6, 0.55)"
-          strokeWidth="34"
-          filter={`url(#${prefix}-tube-blur)`}
-        />
-      )}
-
-      {/* Main 3D torus body */}
-      <ellipse
-        cx="340"
-        cy="210"
-        rx="285"
-        ry="118"
-        fill="none"
-        stroke={`url(#${prefix}-body)`}
-        strokeWidth="32"
-      />
-
-      {/* Specular tubular highlight ridge */}
-      <ellipse
-        cx="340"
-        cy="206"
-        rx="285"
-        ry="115"
-        fill="none"
-        stroke={`url(#${prefix}-shine)`}
-        strokeWidth="10"
-        filter={`url(#${prefix}-tube-blur)`}
-      />
-    </>
-  );
-}
+const TICKS = Array.from({ length: 60 }, (_, idx) => {
+  const angle = (idx * 6 * Math.PI) / 180;
+  const isCardinal = idx % 15 === 0;
+  const isHour = idx % 5 === 0;
+  const outerR = 236;
+  const innerR = isCardinal ? 216 : isHour ? 222 : 228;
+  return {
+    idx,
+    isCardinal,
+    isHour,
+    x1: (280 + innerR * Math.sin(angle)).toFixed(2),
+    y1: (280 - innerR * Math.cos(angle)).toFixed(2),
+    x2: (280 + outerR * Math.sin(angle)).toFixed(2),
+    y2: (280 - outerR * Math.cos(angle)).toFixed(2),
+  };
+});
 
 export function GradientRing3D({ layer }) {
-  const uid = useId().replace(/:/g, '');
-  const isFront = layer === 'front';
+  // Render a single calm architectural horological chapter ring behind the watch
+  if (layer === 'front') return null;
 
   return (
-    <div
-      className={`ring-3d-layer ${isFront ? 'ring-3d-front' : 'ring-3d-back'}`}
-      aria-hidden="true"
-    >
+    <div className="ring-3d-layer ring-3d-back" aria-hidden="true">
       <svg
         className="ring-3d-svg"
-        viewBox="0 0 680 420"
+        viewBox="0 0 560 560"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <RingDefs prefix={uid} />
-        <g
-          transform="rotate(-17 340 210)"
-          mask={isFront ? `url(#${uid}-front-mask)` : undefined}
-        >
-          <TorusGeometry prefix={uid} isFront={isFront} />
-        </g>
+        <circle
+          cx="280"
+          cy="280"
+          r="252"
+          stroke="rgba(255, 240, 220, 0.08)"
+          strokeWidth="1"
+        />
+        <circle
+          cx="280"
+          cy="280"
+          r="212"
+          stroke="rgba(255, 240, 220, 0.06)"
+          strokeWidth="1"
+        />
+        <circle
+          cx="280"
+          cy="280"
+          r="156"
+          stroke="rgba(255, 240, 220, 0.05)"
+          strokeWidth="1"
+          strokeDasharray="2 6"
+        />
+        {TICKS.map((tick) => (
+          <line
+            key={tick.idx}
+            x1={tick.x1}
+            y1={tick.y1}
+            x2={tick.x2}
+            y2={tick.y2}
+            stroke={
+              tick.isCardinal
+                ? 'rgba(255, 240, 220, 0.28)'
+                : tick.isHour
+                ? 'rgba(255, 240, 220, 0.16)'
+                : 'rgba(255, 240, 220, 0.07)'
+            }
+            strokeWidth={tick.isCardinal ? '1.5' : '1'}
+          />
+        ))}
       </svg>
     </div>
   );

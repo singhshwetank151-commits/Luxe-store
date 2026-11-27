@@ -236,10 +236,12 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
       <div className="rlb-mobile-grid-view">
         <header className="rlb-mgrid-header">
           <div className="rlb-mgrid-head-row">
-            <span className="rlb-mgrid-eyebrow">THE COLLECTION</span>
-            <span className="rlb-mgrid-count">{mobileProducts.length} TIMEPIECES</span>
+            <span className="rlb-mgrid-eyebrow">Collection</span>
+            <span className="rlb-mgrid-count">
+              {mobileProducts.length} {mobileProducts.length === 1 ? 'timepiece' : 'timepieces'}
+            </span>
           </div>
-          <h1 className="rlb-mgrid-heading">Mechanical Skeletons</h1>
+          <h1 className="rlb-mgrid-heading">Mechanical skeletons</h1>
           <div className="rlb-mgrid-rule" aria-hidden="true" />
         </header>
 
@@ -265,7 +267,7 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
               <article
                 key={product.id}
                 className="rlb-mgrid-card"
-                style={{ '--stagger': index }}
+                style={{ '--stagger': Math.min(index, 5) }}
                 onClick={() => navigate(`/product/${product.id}`)}
               >
                 <div className="rlb-mgrid-square">
@@ -276,10 +278,10 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
                   <button
                     type="button"
                     className={`rlb-mgrid-add ${isAdded ? 'is-added' : ''}`}
-                    aria-label={isAdded ? `${product.title} added to cart` : `Add ${product.title} to cart`}
+                    aria-label={isAdded ? `${product.title} added to bag` : `Add ${product.title} to bag`}
                     onClick={(e) => handleAddProduct(e, product)}
                   >
-                    {isAdded ? <Check size={15} strokeWidth={2.5} /> : <Plus size={16} strokeWidth={2.1} />}
+                    {isAdded ? <Check size={16} strokeWidth={1.5} /> : <Plus size={16} strokeWidth={1.5} />}
                   </button>
 
                   <img
@@ -297,7 +299,7 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
                   <div className="rlb-mgrid-foot">
                     <span className="rlb-mgrid-price">{product.formattedPrice}</span>
                     <span className="rlb-mgrid-view-cue" aria-hidden="true">
-                      <ArrowUpRight size={14} strokeWidth={1.8} />
+                      <ArrowUpRight size={16} strokeWidth={1.5} />
                     </span>
                   </div>
                 </div>
@@ -339,7 +341,7 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
             );
           })}
 
-          {/* Buy Now & Add to Cart Buttons directly below the active watch */}
+          {/* Buy Now & Add to Bag Buttons directly below the active watch */}
           {featuredProduct && (
             <div className="rlb-stage-actions">
               <button
@@ -347,8 +349,8 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
                 className="rlb-stage-buy-btn"
                 onClick={handleBuyNow}
               >
-                <ShoppingBag size={14} strokeWidth={1.9} />
-                <span>BUY NOW</span>
+                <ShoppingBag size={16} strokeWidth={1.5} />
+                <span>Buy now</span>
               </button>
 
               <button
@@ -358,13 +360,13 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
               >
                 {stageAdded ? (
                   <>
-                    <Check size={15} strokeWidth={2.2} />
-                    <span>ADDED TO CART</span>
+                    <Check size={16} strokeWidth={1.5} />
+                    <span>Added to bag</span>
                   </>
                 ) : (
                   <>
-                    <Plus size={15} strokeWidth={2.1} />
-                    <span>ADD TO CART</span>
+                    <Plus size={16} strokeWidth={1.5} />
+                    <span>Add to bag</span>
                   </>
                 )}
               </button>
@@ -435,10 +437,10 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
                   <button
                     type="button"
                     className={`rlb-add-btn ${isAdded ? 'is-added' : ''}`}
-                    aria-label={isAdded ? `${product.title} added to cart` : `Add ${product.title} to cart`}
+                    aria-label={isAdded ? `${product.title} added to bag` : `Add ${product.title} to bag`}
                     onClick={(e) => handleAddProduct(e, product)}
                   >
-                    {isAdded ? <Check size={16} strokeWidth={2.4} /> : <Plus size={17} strokeWidth={1.9} />}
+                    {isAdded ? <Check size={16} strokeWidth={1.5} /> : <Plus size={16} strokeWidth={1.5} />}
                   </button>
                 </div>
               </article>

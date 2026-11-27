@@ -68,22 +68,22 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
           className="cp-back-btn"
           onClick={() => navigate(isCheckout && !orderPlaced ? '/cart' : '/collection')}
         >
-          <ArrowLeft size={15} />
-          <span>{isCheckout && !orderPlaced ? 'BACK TO BASKET' : 'CONTINUE EXPLORING'}</span>
+          <ArrowLeft size={16} strokeWidth={1.5} />
+          <span>{isCheckout && !orderPlaced ? 'Back to bag' : 'Back to collection'}</span>
         </button>
 
         {orderPlaced ? (
           <section className="cp-confirmed" aria-live="polite">
-            <CheckCircle2 size={52} strokeWidth={1.4} className="cp-confirmed-icon" />
-            <span className="cp-eyebrow">PENDING PAYMENT VERIFICATION</span>
-            <h1 className="cp-title">RESERVATION RECORDED</h1>
+            <CheckCircle2 size={44} strokeWidth={1.5} className="cp-confirmed-icon" />
+            <span className="cp-eyebrow">Pending payment verification</span>
+            <h1 className="cp-title">Reservation recorded</h1>
             <p className="cp-confirmed-copy">
               Thank you{customerName ? `, ${customerName}` : ''}. Your timepiece quote request has
               been recorded for {user?.email || customerEmail || 'your account'}. Fulfillment and
               dispatch remain locked until server-side payment verification completes.
             </p>
             <button type="button" className="cp-primary-btn" onClick={() => navigate('/collection')}>
-              RETURN TO COLLECTION
+              Return to collection
             </button>
           </section>
         ) : (
@@ -91,23 +91,23 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
             <header className="cp-header">
               <div>
                 <span className="cp-eyebrow">
-                  {isCheckout ? 'EXPRESS HOROLOGICAL CHECKOUT' : 'CURATED SELECTION'}
+                  {isCheckout ? 'Direct concierge checkout' : 'Selected timepieces'}
                 </span>
                 <h1 className="cp-title">
-                  {isCheckout ? 'CHECKOUT' : `YOUR BASKET (${cartCount})`}
+                  {isCheckout ? 'Checkout' : `Your bag (${cartCount})`}
                 </h1>
               </div>
             </header>
 
             {items.length === 0 ? (
               <section className="cp-empty-state">
-                <p className="cp-empty-text">Your shopping basket is currently empty.</p>
+                <p className="cp-empty-text">Your bag is currently empty.</p>
                 <button
                   type="button"
                   className="cp-primary-btn"
                   onClick={() => navigate('/collection')}
                 >
-                  EXPLORE TIMEPIECES
+                  Explore collection
                 </button>
               </section>
             ) : (
@@ -116,10 +116,10 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                 <section className="cp-main-col">
                   {isCheckout ? (
                     <form id="luxe-fullscreen-checkout" className="cp-form" onSubmit={handlePlaceOrder}>
-                      <h2 className="cp-section-label">CLIENT & DELIVERY DETAILS</h2>
+                      <h2 className="cp-section-label">Client and delivery details</h2>
                       <div className="cp-form-grid">
                         <label>
-                          <span>FULL NAME</span>
+                          <span>Full name</span>
                           <input
                             type="text"
                             required
@@ -132,7 +132,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                           />
                         </label>
                         <label>
-                          <span>EMAIL ADDRESS</span>
+                          <span>Email address</span>
                           <input
                             type="email"
                             required
@@ -145,7 +145,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                           />
                         </label>
                         <label>
-                          <span>PHONE NUMBER</span>
+                          <span>Phone number</span>
                           <input
                             type="tel"
                             required
@@ -158,7 +158,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                           />
                         </label>
                         <label>
-                          <span>CITY & POSTAL CODE</span>
+                          <span>City and postal code</span>
                           <input
                             type="text"
                             required
@@ -171,7 +171,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                           />
                         </label>
                         <label className="cp-full-span">
-                          <span>STREET ADDRESS</span>
+                          <span>Street address</span>
                           <input
                             type="text"
                             required
@@ -186,7 +186,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                       </div>
 
                       <div className="cp-checkout-items-preview">
-                        <h2 className="cp-section-label">TIMEPIECES IN ORDER ({cartCount})</h2>
+                        <h2 className="cp-section-label">Timepieces in order ({cartCount})</h2>
                         <ul className="cp-mini-list">
                           {items.map((item) => (
                             <li key={`${item.productId}-${item.variantId}`} className="cp-mini-item">
@@ -232,7 +232,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                               aria-label={`Decrease quantity of ${item.title}`}
                               onClick={() => updateQuantity(item.productId, item.variantId, -1)}
                             >
-                              <Minus size={14} />
+                              <Minus size={16} strokeWidth={1.5} />
                             </button>
                             <span>{item.quantity}</span>
                             <button
@@ -241,7 +241,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                               disabled={item.quantity >= MAX_ITEM_QUANTITY}
                               onClick={() => updateQuantity(item.productId, item.variantId, 1)}
                             >
-                              <Plus size={14} />
+                              <Plus size={16} strokeWidth={1.5} />
                             </button>
                           </div>
 
@@ -255,7 +255,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                               aria-label={`Remove ${item.title}`}
                               onClick={() => removeFromCart(item.productId, item.variantId)}
                             >
-                              <Trash2 size={15} />
+                              <Trash2 size={16} strokeWidth={1.5} />
                               <span>Remove</span>
                             </button>
                           </div>
@@ -267,7 +267,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
 
                 {/* Right Column: Order Summary */}
                 <aside className="cp-summary-card" aria-label="Order Summary">
-                  <h2 className="cp-summary-heading">ORDER SUMMARY</h2>
+                  <h2 className="cp-summary-heading">Order summary</h2>
 
                   <div className="cp-summary-lines">
                     <div className="cp-summary-line">
@@ -275,13 +275,13 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                       <span>${subtotal.toLocaleString('en-US')}</span>
                     </div>
                     <div className="cp-summary-line">
-                      <span>Insured Courier Delivery</span>
+                      <span>Insured courier delivery</span>
                       <span>Complimentary</span>
                     </div>
                   </div>
 
                   <div className="cp-summary-total">
-                    <span>TOTAL</span>
+                    <span>Total</span>
                     <strong>${subtotal.toLocaleString('en-US')}</strong>
                   </div>
 
@@ -297,7 +297,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                             navigate('/signin');
                           }}
                         >
-                          SIGN IN WITH GOOGLE
+                          Sign in with Google
                         </button>
                       )}
                     </div>
@@ -310,7 +310,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                       disabled={isSubmitting}
                       className="cp-primary-btn cp-full-btn"
                     >
-                      {isSubmitting ? 'VALIDATING...' : 'PLACE LUXURY ORDER'}
+                      {isSubmitting ? 'Validating...' : 'Place reservation'}
                     </button>
                   ) : (
                     <button
@@ -318,13 +318,13 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                       className="cp-primary-btn cp-full-btn"
                       onClick={() => navigate('/checkout')}
                     >
-                      PROCEED TO CHECKOUT
+                      Proceed to checkout
                     </button>
                   )}
 
                   <div className="cp-assurance">
-                    <ShieldCheck size={15} />
-                    <span>Swiss Authenticity Certificate & 5-Year International Warranty</span>
+                    <ShieldCheck size={16} strokeWidth={1.5} />
+                    <span>Authenticity certificate and 5-year international warranty</span>
                   </div>
                 </aside>
               </div>

@@ -17,10 +17,10 @@ export function ProductDetailPage({ productId }) {
     return (
       <main className="pdp-page">
         <div className="pdp-not-found">
-          <h1>Timepiece Not Found</h1>
+          <h1>Timepiece not found</h1>
           <button type="button" className="pdp-back-btn" onClick={() => navigate('/collection')}>
-            <ArrowLeft size={16} />
-            <span>Back to The Runway Edit</span>
+            <ArrowLeft size={16} strokeWidth={1.5} />
+            <span>Back to collection</span>
           </button>
         </div>
       </main>
@@ -39,8 +39,8 @@ export function ProductDetailPage({ productId }) {
     <main className="pdp-page">
       <div className="pdp-container">
         <button type="button" className="pdp-back-btn" onClick={() => navigate('/collection')}>
-          <ArrowLeft size={15} />
-          <span>BACK TO THE RUNWAY EDIT</span>
+          <ArrowLeft size={16} strokeWidth={1.5} />
+          <span>Back to collection</span>
         </button>
 
         <div className="pdp-grid">
@@ -58,7 +58,7 @@ export function ProductDetailPage({ productId }) {
 
             {product.variants?.length > 0 && (
               <div className="pdp-variants">
-                <span className="pdp-label">EDITION / CASE SIZE</span>
+                <span className="pdp-label">Edition and case size</span>
                 <div className="pdp-variant-list">
                   {product.variants.map((variant) => (
                     <button
@@ -78,19 +78,19 @@ export function ProductDetailPage({ productId }) {
               <button type="button" className="pdp-cta" onClick={handleAdd}>
                 {added ? (
                   <>
-                    <Check size={16} />
-                    <span>ADDED TO BASKET</span>
+                    <Check size={16} strokeWidth={1.5} />
+                    <span>Added to bag</span>
                   </>
                 ) : (
                   <>
-                    <Plus size={16} />
-                    <span>ADD TO BASKET</span>
+                    <Plus size={16} strokeWidth={1.5} />
+                    <span>Add to bag</span>
                   </>
                 )}
               </button>
 
               <button type="button" className="pdp-bag-link" onClick={() => navigate('/cart')}>
-                VIEW BASKET
+                View bag
               </button>
             </div>
 

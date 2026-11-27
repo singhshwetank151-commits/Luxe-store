@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  Search,
   CircleUserRound,
   ShoppingBasket,
   Home,
@@ -64,7 +63,7 @@ export function Header() {
         <button
           type="button"
           className={`logo-grid ${mobileMenuOpen ? 'is-open' : ''}`}
-          aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Luxe Store Menu & Home'}
+          aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Luxe Store menu and home'}
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-left-header"
           onClick={handleLogoClick}
@@ -81,21 +80,16 @@ export function Header() {
             className={`nav-link ${route.view === 'home' ? 'is-active' : ''}`}
             onClick={(e) => handleLinkClick(e, '/')}
           >
-            HOME
+            Home
           </a>
           <a
             href={withBase('/collection')}
-            className={`nav-link ${route.view === 'collection' ? 'is-active' : ''}`}
+            className={`nav-link ${
+              route.view === 'collection' || route.view === 'product' ? 'is-active' : ''
+            }`}
             onClick={(e) => handleLinkClick(e, '/collection')}
           >
-            COLLECTION
-          </a>
-          <a
-            href="#about"
-            className="nav-link nav-link-about"
-            onClick={(e) => e.preventDefault()}
-          >
-            ABOUT
+            Collection
           </a>
         </nav>
 
@@ -107,17 +101,9 @@ export function Header() {
               aria-label="Admin Console"
               onClick={() => navigate('/admin')}
             >
-              <span>ADMIN</span>
+              <span>Admin</span>
             </button>
           )}
-          <button
-            type="button"
-            className="icon-btn header-search-btn"
-            aria-label="Search"
-            onClick={() => navigate('/collection')}
-          >
-            <Search size={20} strokeWidth={1.7} />
-          </button>
           <button
             type="button"
             className={`header-auth-btn header-desktop-only ${
@@ -129,26 +115,24 @@ export function Header() {
                 ? 'is-active'
                 : ''
             }`}
-            aria-label={isAuthenticated ? `Profile (${user?.fullName || user?.email})` : 'Sign In'}
+            aria-label={isAuthenticated ? `Profile (${user?.fullName || user?.email})` : 'Sign in'}
             onClick={() => navigate(isAuthenticated ? '/profile' : '/signin')}
           >
-            <CircleUserRound size={17} strokeWidth={1.7} />
-            <span>{isAuthenticated ? 'PROFILE' : 'SIGN IN'}</span>
+            <CircleUserRound size={16} strokeWidth={1.5} />
+            <span>{isAuthenticated ? 'Profile' : 'Sign in'}</span>
             {isAuthenticated && <span className="account-active-inline-dot" aria-hidden="true" />}
           </button>
           <button
             type="button"
             className="icon-btn icon-btn-basket"
-            aria-label={`Shopping Basket${cartCount > 0 ? `, ${cartCount} items` : ''}`}
+            aria-label={`Bag${cartCount > 0 ? `, ${cartCount} items` : ''}`}
             onClick={() => handleMobileNavigate('/cart')}
           >
-            <ShoppingBasket size={20} strokeWidth={1.7} />
-            {cartCount > 0 ? (
+            <ShoppingBasket size={18} strokeWidth={1.5} />
+            {cartCount > 0 && (
               <span className="basket-count-badge" data-testid="cart-count">
                 {cartCount}
               </span>
-            ) : (
-              <span className="basket-badge" aria-hidden="true" />
             )}
           </button>
         </div>
@@ -174,7 +158,7 @@ export function Header() {
             aria-label="Close navigation menu"
             onClick={() => setMobileMenuOpen(false)}
           >
-            <X size={16} strokeWidth={2} />
+            <X size={16} strokeWidth={1.5} />
           </button>
         </div>
 
@@ -184,8 +168,8 @@ export function Header() {
             className={`mobile-nav-item ${route.view === 'home' ? 'is-active' : ''}`}
             onClick={() => handleMobileNavigate('/')}
           >
-            <Home size={17} strokeWidth={1.7} />
-            <span>HOME</span>
+            <Home size={16} strokeWidth={1.5} />
+            <span>Home</span>
           </button>
 
           <button
@@ -195,8 +179,8 @@ export function Header() {
             }`}
             onClick={() => handleMobileNavigate('/collection')}
           >
-            <LayoutGrid size={17} strokeWidth={1.7} />
-            <span>COLLECTION</span>
+            <LayoutGrid size={16} strokeWidth={1.5} />
+            <span>Collection</span>
           </button>
 
           <button
@@ -206,8 +190,8 @@ export function Header() {
             }`}
             onClick={() => handleMobileNavigate('/cart')}
           >
-            <ShoppingBasket size={17} strokeWidth={1.7} />
-            <span>SHOPPING BAG</span>
+            <ShoppingBasket size={16} strokeWidth={1.5} />
+            <span>Bag</span>
             {cartCount > 0 && <span className="mobile-nav-badge">{cartCount}</span>}
           </button>
 
@@ -220,8 +204,8 @@ export function Header() {
             }`}
             onClick={() => handleMobileNavigate(isAuthenticated ? '/profile' : '/signin')}
           >
-            <CircleUserRound size={17} strokeWidth={1.7} />
-            <span>{isAuthenticated ? 'PROFILE' : 'SIGN IN'}</span>
+            <CircleUserRound size={16} strokeWidth={1.5} />
+            <span>{isAuthenticated ? 'Profile' : 'Sign in'}</span>
             {isAuthenticated && <span className="account-active-inline-dot" aria-hidden="true" />}
           </button>
 
@@ -231,14 +215,14 @@ export function Header() {
               className={`mobile-nav-item ${route.view === 'admin' ? 'is-active' : ''}`}
               onClick={() => handleMobileNavigate('/admin')}
             >
-              <ShieldCheck size={17} strokeWidth={1.7} />
-              <span>ADMIN</span>
+              <ShieldCheck size={16} strokeWidth={1.5} />
+              <span>Admin</span>
             </button>
           )}
         </nav>
 
         <div className="mobile-nav-foot">
-          <span>MECHANICAL SKELETON ATELIER</span>
+          <span>Mechanical skeleton atelier</span>
         </div>
       </aside>
     </>
