@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Supabase CLI temp files
+supabase/.temp/
+
+# Logs & OS files
+*.log
+.DS_Store
+Thumbs.db
