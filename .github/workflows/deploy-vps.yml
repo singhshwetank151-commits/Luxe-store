@@ -52,7 +52,7 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
-      - name: Upload bundle & restart server on Altare.gg VPS
+      - name: Bootstrap, upload bundle & start server on Altare.gg VPS
         if: steps.check.outputs.enabled == 'true'
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -61,6 +61,7 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
           VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          CF_TUNNEL_TOKEN: ${{ secrets.CF_TUNNEL_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -86,9 +87,54 @@ jobs:
             exit 1
           fi
 
-          # Ensure target directories exist
-          ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" \
-            "mkdir -p '${TARGET_DIR}/deploy' '${TARGET_DIR}/dist.new' '${TARGET_DIR}/logs'"
+          # Auto-bootstrap VPS on first run (installs rsync, Node 22, cloudflared, and start.sh if missing)
+          ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" "
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            mkdir -p '${TARGET_DIR}/deploy' '${TARGET_DIR}/dist.new' '${TARGET_DIR}/logs'
+
+            if ! command -v rsync >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+              apt-get update -qq
+              apt-get install -y -qq curl ca-certificates gnupg rsync >/dev/null
+            fi
+
+            if ! command -v node >/dev/null 2>&1 || [ \"\$(node -v | sed 's/^v//' | cut -d. -f1)\" -lt 18 ]; then
+              curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
+              apt-get install -y -qq nodejs >/dev/null
+            fi
+
+            if ! command -v cloudflared >/dev/null 2>&1; then
+              ARCH=\"\$(dpkg --print-architecture)\"
+              curl -fsSL \"https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-\${ARCH}.deb\" -o /tmp/cloudflared.deb
+              dpkg -i /tmp/cloudflared.deb >/dev/null
+              rm -f /tmp/cloudflared.deb
+            fi
+
+            cat > '${TARGET_DIR}/start.sh' <<'STARTEOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          APP_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"
+          export HOST=127.0.0.1
+          export PORT=8080
+          export DIST_DIR=\"\${APP_DIR}/dist\"
+
+          if [ -f \"\${APP_DIR}/server.pid\" ]; then
+            OLD_PID=\$(cat \"\${APP_DIR}/server.pid\" || true)
+            if [ -n \"\${OLD_PID}\" ] && kill -0 \"\${OLD_PID}\" 2>/dev/null; then
+              kill \"\${OLD_PID}\" || true
+              sleep 1
+            fi
+          fi
+
+          if command -v systemctl >/dev/null 2>&1 && systemctl is-system-running >/dev/null 2>&1 && systemctl list-unit-files | grep -q '^luxe-store.service'; then
+            systemctl restart luxe-store
+          else
+            nohup node \"\${APP_DIR}/deploy/server.mjs\" </dev/null >> \"\${APP_DIR}/logs/server.log\" 2>&1 &
+            echo \$! > \"\${APP_DIR}/server.pid\"
+          fi
+          STARTEOF
+            chmod +x '${TARGET_DIR}/start.sh'
+          "
 
           # Upload built dist/ to dist.new and sync deploy/server.mjs
           ${SSH_PREFIX} rsync -az --delete -e "ssh ${SSH_OPTS}" \
@@ -106,7 +152,19 @@ jobs:
             fi
             mv '${TARGET_DIR}/dist.new' '${TARGET_DIR}/dist'
             rm -rf '${TARGET_DIR}/dist.old'
-            if [ -x '${TARGET_DIR}/start.sh' ]; then
-              '${TARGET_DIR}/start.sh'
-            fi
+            '${TARGET_DIR}/start.sh'
           "
+
+          # Optionally start Cloudflare Tunnel if CF_TUNNEL_TOKEN secret is provided
+          if [ -n "${CF_TUNNEL_TOKEN:-}" ]; then
+            CLEAN_TOKEN="$(printf '%s' "${CF_TUNNEL_TOKEN}" | tr -d '\r\n' | awk '{print $NF}')"
+            printf '%s' "${CLEAN_TOKEN}" | ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" "
+              set -euo pipefail
+              umask 077
+              cat > '${TARGET_DIR}/.cf_token'
+              if ! pgrep -f 'cloudflared tunnel' >/dev/null 2>&1; then
+                TUNNEL_TOKEN=\"\$(cat '${TARGET_DIR}/.cf_token')\" nohup cloudflared tunnel --no-autoupdate run </dev/null >> '${TARGET_DIR}/logs/cloudflared.log' 2>&1 &
+                echo \$! > '${TARGET_DIR}/cloudflared.pid'
+              fi
+            "
+          fi
