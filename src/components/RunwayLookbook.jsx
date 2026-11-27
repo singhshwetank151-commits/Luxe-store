@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Check, ShoppingBag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Check, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { RUNWAY_LOOKS } from '../data/runwayLooks';
-import { getProductById } from '../data/catalog';
+import { PRODUCTS, getProductById } from '../data/catalog';
 import { useCart, useRouter } from '../context/storeHooks';
 import './RunwayLookbook.css';
 
@@ -67,13 +67,26 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
   const [addedProductMap, setAddedProductMap] = useState({});
   const [stageAdded, setStageAdded] = useState(false);
   const [cartError, setCartError] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   const railRef = useRef(null);
   const timersRef = useRef(new Map());
-  const touchStartRef = useRef(null);
 
   const { addToCart, items } = useCart();
   const { navigate } = useRouter();
+
+  const mobileCategories = useMemo(
+    () => ['All', ...Array.from(new Set(PRODUCTS.map((p) => p.category)))],
+    []
+  );
+
+  const mobileProducts = useMemo(
+    () =>
+      selectedCategory === 'All'
+        ? PRODUCTS
+        : PRODUCTS.filter((p) => p.category === selectedCategory),
+    [selectedCategory]
+  );
 
   // Build full scrollable menu list (1 product per look, 3 visible at once in rail)
   const railEntries = useMemo(
@@ -155,27 +168,6 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
     [activeIndex, scrollRailToLook]
   );
 
-  const handleStageTouchStart = useCallback((e) => {
-    const t = e.touches?.[0];
-    if (!t) return;
-    touchStartRef.current = { x: t.clientX, y: t.clientY };
-  }, []);
-
-  const handleStageTouchEnd = useCallback(
-    (e) => {
-      const start = touchStartRef.current;
-      touchStartRef.current = null;
-      const t = e.changedTouches?.[0];
-      if (!start || !t) return;
-      const dx = t.clientX - start.x;
-      const dy = t.clientY - start.y;
-      if (Math.abs(dx) >= 42 && Math.abs(dx) > Math.abs(dy) * 1.2) {
-        scrollRailToLook(dx < 0 ? activeIndex + 1 : activeIndex - 1);
-      }
-    },
-    [activeIndex, scrollRailToLook]
-  );
-
   const activeLook = looks[activeIndex] || looks[0];
   const featuredProduct = activeLook ? getProductById(activeLook.productIds[0]) : null;
 
@@ -240,49 +232,89 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
       aria-label="The Runway Edit Lookbook"
       onKeyDown={handleKeyDown}
     >
-      {/* Left/Center Runway Stage */}
-      <div
-        className="rlb-stage-shell"
-        onTouchStart={handleStageTouchStart}
-        onTouchEnd={handleStageTouchEnd}
-      >
-        {featuredProduct && (
-          <div className="rlb-mobile-stage-head">
-            <div className="rlb-mobile-stage-meta">
-              <span className="rlb-mobile-counter">
-                {String(activeIndex + 1).padStart(2, '0')} / {String(totalLooks).padStart(2, '0')}
-              </span>
-              <span className="rlb-mobile-title">{featuredProduct.title}</span>
-              <span className="rlb-mobile-price">{featuredProduct.formattedPrice}</span>
-            </div>
+      {/* Phone-only Square Luxury Grid (hidden on PC & tablet) */}
+      <div className="rlb-mobile-grid-view">
+        <header className="rlb-mgrid-header">
+          <div className="rlb-mgrid-head-row">
+            <span className="rlb-mgrid-eyebrow">THE COLLECTION</span>
+            <span className="rlb-mgrid-count">{mobileProducts.length} TIMEPIECES</span>
+          </div>
+          <h1 className="rlb-mgrid-heading">Mechanical Skeletons</h1>
+          <div className="rlb-mgrid-rule" aria-hidden="true" />
+        </header>
+
+        <div className="rlb-mgrid-filters" role="tablist" aria-label="Filter collection">
+          {mobileCategories.map((cat) => (
             <button
+              key={cat}
               type="button"
-              className="rlb-mobile-details-btn"
-              onClick={() => navigate(`/product/${featuredProduct.id}`)}
+              role="tab"
+              aria-selected={selectedCategory === cat}
+              className={`rlb-mgrid-pill ${selectedCategory === cat ? 'is-active' : ''}`}
+              onClick={() => setSelectedCategory(cat)}
             >
-              DETAILS
+              {cat}
             </button>
+          ))}
+        </div>
+
+        <div className="rlb-mgrid">
+          {mobileProducts.map((product, index) => {
+            const isAdded = Boolean(addedProductMap[product.id]);
+            return (
+              <article
+                key={product.id}
+                className="rlb-mgrid-card"
+                style={{ '--stagger': index }}
+                onClick={() => navigate(`/product/${product.id}`)}
+              >
+                <div className="rlb-mgrid-square">
+                  <span className="rlb-mgrid-index" aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+
+                  <button
+                    type="button"
+                    className={`rlb-mgrid-add ${isAdded ? 'is-added' : ''}`}
+                    aria-label={isAdded ? `${product.title} added to cart` : `Add ${product.title} to cart`}
+                    onClick={(e) => handleAddProduct(e, product)}
+                  >
+                    {isAdded ? <Check size={15} strokeWidth={2.5} /> : <Plus size={16} strokeWidth={2.1} />}
+                  </button>
+
+                  <img
+                    src={product.image}
+                    alt={product.title}
+                    className="rlb-mgrid-img"
+                    loading="lazy"
+                  />
+                  <div className="rlb-mgrid-shadow" aria-hidden="true" />
+                </div>
+
+                <div className="rlb-mgrid-info">
+                  <span className="rlb-mgrid-cat">{product.category}</span>
+                  <h2 className="rlb-mgrid-title">{product.title}</h2>
+                  <div className="rlb-mgrid-foot">
+                    <span className="rlb-mgrid-price">{product.formattedPrice}</span>
+                    <span className="rlb-mgrid-view-cue" aria-hidden="true">
+                      <ArrowUpRight size={14} strokeWidth={1.8} />
+                    </span>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        {cartError && (
+          <div className="rlb-mgrid-toast" role="alert">
+            {cartError}
           </div>
         )}
+      </div>
 
-        <button
-          type="button"
-          className="rlb-mobile-nav-btn rlb-mobile-nav-prev"
-          aria-label="Previous timepiece"
-          onClick={() => scrollRailToLook(activeIndex - 1)}
-        >
-          <ChevronLeft size={20} strokeWidth={1.8} />
-        </button>
-
-        <button
-          type="button"
-          className="rlb-mobile-nav-btn rlb-mobile-nav-next"
-          aria-label="Next timepiece"
-          onClick={() => scrollRailToLook(activeIndex + 1)}
-        >
-          <ChevronRight size={20} strokeWidth={1.8} />
-        </button>
-
+      {/* Left/Center Runway Stage (PC & Tablet) */}
+      <div className="rlb-stage-shell">
         <div className="rlb-runway-line" aria-live="polite">
           {looks.map((look, idx) => {
             const rawOffset = idx - activeIndex;
@@ -366,17 +398,13 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
         )}
       </div>
 
-      {/* Right-Side Scroll Menu */}
+      {/* Right-Side Scroll Menu (PC & Tablet) */}
       <aside
         className="rlb-rail"
         ref={railRef}
         onScroll={handleRailScroll}
         aria-label="Collection Scroll Menu"
       >
-        <div className="rlb-mobile-rail-head">
-          <span>COLLECTION</span>
-          <span>SWIPE TO EXPLORE</span>
-        </div>
         <div className="rlb-rail-list">
           {railEntries.map(({ look, lookIdx, product }, idx) => {
             const isAdded = Boolean(addedProductMap[product.id]);
