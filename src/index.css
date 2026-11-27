@@ -180,6 +180,7 @@ body,
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-left: auto;
 }
 
 .icon-btn {
@@ -539,6 +540,25 @@ body,
   .nav-links,
   .header-desktop-only {
     display: none;
+  }
+
+  .site-header.is-home .nav-links {
+    display: flex;
+    position: static;
+    transform: none;
+    gap: 16px;
+  }
+
+  .site-header.is-home .nav-link {
+    font-size: 13px;
+    padding: 8px 2px;
+  }
+
+  .site-header.is-home .header-desktop-only {
+    display: inline-flex;
+    height: 36px;
+    padding: 0 10px;
+    font-size: 13px;
   }
 
   .header-actions {

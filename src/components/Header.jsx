@@ -57,27 +57,35 @@ export function Header() {
     navigate(target);
   };
 
+  const isHome = route.view === 'home';
+
   return (
     <>
-      <header className={`site-header ${mobileMenuOpen ? 'is-menu-open' : ''}`}>
-        <button
-          type="button"
-          className={`logo-grid ${mobileMenuOpen ? 'is-open' : ''}`}
-          aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Luxe Store menu and home'}
-          aria-expanded={mobileMenuOpen}
-          aria-controls="mobile-left-header"
-          onClick={handleLogoClick}
-        >
-          <span className="logo-dot" />
-          <span className="logo-dot" />
-          <span className="logo-dot" />
-          <span className="logo-dot" />
-        </button>
+      <header
+        className={`site-header ${isHome ? 'is-home' : ''} ${
+          mobileMenuOpen && !isHome ? 'is-menu-open' : ''
+        }`}
+      >
+        {!isHome && (
+          <button
+            type="button"
+            className={`logo-grid ${mobileMenuOpen ? 'is-open' : ''}`}
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Luxe Store menu and home'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-left-header"
+            onClick={handleLogoClick}
+          >
+            <span className="logo-dot" />
+            <span className="logo-dot" />
+            <span className="logo-dot" />
+            <span className="logo-dot" />
+          </button>
+        )}
 
         <nav className="nav-links" aria-label="Main Navigation">
           <a
             href={withBase('/')}
-            className={`nav-link ${route.view === 'home' ? 'is-active' : ''}`}
+            className={`nav-link ${isHome ? 'is-active' : ''}`}
             onClick={(e) => handleLinkClick(e, '/')}
           >
             Home
@@ -138,18 +146,20 @@ export function Header() {
         </div>
       </header>
 
-      {/* Phone-only left-side header panel connected to the 4-dot button (hidden on PC) */}
-      <div
-        className={`mobile-nav-backdrop ${mobileMenuOpen ? 'is-open' : ''}`}
-        aria-hidden={!mobileMenuOpen}
-        onClick={() => setMobileMenuOpen(false)}
-      />
-      <aside
-        id="mobile-left-header"
-        className={`mobile-nav-drawer ${mobileMenuOpen ? 'is-open' : ''}`}
-        aria-label="Mobile Navigation"
-        aria-hidden={!mobileMenuOpen}
-      >
+      {/* Phone-only left-side header panel connected to the 4-dot button on inner pages (hidden on PC & Home) */}
+      {!isHome && (
+        <>
+          <div
+            className={`mobile-nav-backdrop ${mobileMenuOpen ? 'is-open' : ''}`}
+            aria-hidden={!mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside
+            id="mobile-left-header"
+            className={`mobile-nav-drawer ${mobileMenuOpen ? 'is-open' : ''}`}
+            aria-label="Mobile Navigation"
+            aria-hidden={!mobileMenuOpen}
+          >
         <div className="mobile-nav-top">
           <span className="mobile-nav-brand">Luxe Store</span>
           <button
@@ -225,6 +235,8 @@ export function Header() {
           <span>Mechanical skeleton atelier</span>
         </div>
       </aside>
+        </>
+      )}
     </>
   );
 }
