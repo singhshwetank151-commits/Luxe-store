@@ -1,0 +1,112 @@
+name: Deploy to Altare.gg VPS
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+concurrency:
+  group: 'altare-vps-deploy'
+  cancel-in-progress: true
+
+jobs:
+  deploy-vps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check VPS configuration
+        id: check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -n "${VPS_HOST:-}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "VPS_HOST secret not set yet — skipping Altare.gg VPS deploy."
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.check.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.check.outputs.enabled == 'true'
+        run: npm ci
+
+      - name: Run tests
+        if: steps.check.outputs.enabled == 'true'
+        run: npm test
+
+      - name: Build production bundle (root path)
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          VITE_BASE_PATH: /
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      - name: Upload bundle & restart server on Altare.gg VPS
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+
+          PORT="${VPS_PORT:-22}"
+          USER="${VPS_USER:-root}"
+          TARGET_DIR="${VPS_DEPLOY_PATH:-/opt/luxe-store}"
+
+          SSH_OPTS="-p ${PORT} -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
+          SSH_PREFIX=""
+
+          if [ -n "${VPS_SSH_KEY:-}" ]; then
+            mkdir -p ~/.ssh
+            printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            SSH_OPTS="${SSH_OPTS} -i ~/.ssh/deploy_key"
+          elif [ -n "${VPS_PASSWORD:-}" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass >/dev/null
+            SSH_OPTS="-p ${PORT} -o StrictHostKeyChecking=accept-new"
+            SSH_PREFIX="sshpass -e"
+            export SSHPASS="${VPS_PASSWORD}"
+          else
+            echo "Error: Set either VPS_SSH_KEY or VPS_PASSWORD in GitHub Repository Secrets."
+            exit 1
+          fi
+
+          # Ensure target directories exist
+          ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" \
+            "mkdir -p '${TARGET_DIR}/deploy' '${TARGET_DIR}/dist.new' '${TARGET_DIR}/logs'"
+
+          # Upload built dist/ to dist.new and sync deploy/server.mjs
+          ${SSH_PREFIX} rsync -az --delete -e "ssh ${SSH_OPTS}" \
+            ./dist/ "${USER}@${VPS_HOST}:${TARGET_DIR}/dist.new/"
+
+          ${SSH_PREFIX} rsync -az -e "ssh ${SSH_OPTS}" \
+            ./deploy/server.mjs "${USER}@${VPS_HOST}:${TARGET_DIR}/deploy/server.mjs"
+
+          # Atomic swap of dist/ + restart server
+          ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" "
+            set -euo pipefail
+            rm -rf '${TARGET_DIR}/dist.old'
+            if [ -d '${TARGET_DIR}/dist' ]; then
+              mv '${TARGET_DIR}/dist' '${TARGET_DIR}/dist.old'
+            fi
+            mv '${TARGET_DIR}/dist.new' '${TARGET_DIR}/dist'
+            rm -rf '${TARGET_DIR}/dist.old'
+            if [ -x '${TARGET_DIR}/start.sh' ]; then
+              '${TARGET_DIR}/start.sh'
+            fi
+          "
