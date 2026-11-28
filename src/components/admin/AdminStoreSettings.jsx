@@ -30,7 +30,11 @@ export function AdminStoreSettings({ settings, onUpdated, setFeedback }) {
   const [previewQrDataUrl, setPreviewQrDataUrl] = useState('');
   const [uploadingQr, setUploadingQr] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmUpiChange, setConfirmUpiChange] = useState(false);
   const fileRef = useRef(null);
+
+  const originalUpiId = String(settings?.upi_id || '').trim();
+  const isUpiChanging = upiId.trim() !== originalUpiId;
 
   const previewIntentUrl = useMemo(() => {
     if (!upiId.trim()) return '';
@@ -126,6 +130,12 @@ export function AdminStoreSettings({ settings, onUpdated, setFeedback }) {
       return;
     }
 
+    // Require explicit second confirmation when changing live payout UPI ID
+    if (isUpiChanging && !confirmUpiChange) {
+      setConfirmUpiChange(true);
+      return;
+    }
+
     setSaving(true);
     try {
       let query;
@@ -144,6 +154,7 @@ export function AdminStoreSettings({ settings, onUpdated, setFeedback }) {
         return;
       }
 
+      setConfirmUpiChange(false);
       setFeedback({
         type: 'success',
         text: 'Store & UPI checkout settings saved. Live on /checkout immediately.',
@@ -186,7 +197,10 @@ export function AdminStoreSettings({ settings, onUpdated, setFeedback }) {
                 maxLength={96}
                 placeholder="yourstore@ibl"
                 value={upiId}
-                onChange={(e) => setUpiId(e.target.value)}
+                onChange={(e) => {
+                  setUpiId(e.target.value);
+                  setConfirmUpiChange(false);
+                }}
               />
             </label>
 
@@ -253,10 +267,33 @@ export function AdminStoreSettings({ settings, onUpdated, setFeedback }) {
             </label>
           </div>
 
+          {confirmUpiChange && isUpiChanging && (
+            <div className="adm-banner adm-banner-error" role="alert">
+              <span>
+                Confirm payout UPI change: <strong>{originalUpiId || 'Not set'}</strong> →{' '}
+                <strong>{upiId.trim() || 'Cleared'}</strong>. All future customer payments will go to
+                this VPA.
+              </span>
+              <button
+                type="button"
+                className="adm-secondary-btn"
+                onClick={() => setConfirmUpiChange(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           <div className="adm-inline-actions">
             <button type="submit" className="adm-primary-btn" disabled={saving || uploadingQr}>
               <Check size={16} strokeWidth={1.5} />
-              <span>{saving ? 'Saving settings...' : 'Save settings'}</span>
+              <span>
+                {saving
+                  ? 'Saving settings...'
+                  : confirmUpiChange && isUpiChanging
+                  ? 'Confirm & save new UPI ID'
+                  : 'Save settings'}
+              </span>
             </button>
           </div>
         </form>

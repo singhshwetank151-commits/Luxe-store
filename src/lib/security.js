@@ -700,3 +700,34 @@ export function buildOrdersCsv(orders = []) {
   return [headers.map(csvEscapeCell).join(','), ...rows].join('\n');
 }
 
+export const ADMIN_INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+export const ADMIN_INACTIVITY_WARN_MS = 2 * 60 * 1000; // Warn during final 2 minutes
+
+export function evaluateAdminLoginLockout(state, now = Date.now()) {
+  const lockedUntil = Number(state?.lockedUntil || 0);
+  const failures = Number(state?.failures || 0);
+  if (lockedUntil > now) {
+    const remainingSeconds = Math.max(1, Math.ceil((lockedUntil - now) / 1000));
+    return { locked: true, remainingSeconds, failures };
+  }
+  return { locked: false, remainingSeconds: 0, failures };
+}
+
+export function recordAdminLoginFailure(state, now = Date.now()) {
+  const prevFailures = Number(state?.failures || 0);
+  const failures = prevFailures + 1;
+  let cooldownMs = 0;
+  if (failures === 3) {
+    cooldownMs = 15 * 1000;
+  } else if (failures === 4) {
+    cooldownMs = 60 * 1000;
+  } else if (failures >= 5) {
+    cooldownMs = 5 * 60 * 1000;
+  }
+  return {
+    failures,
+    lockedUntil: cooldownMs > 0 ? now + cooldownMs : 0,
+  };
+}
+
+

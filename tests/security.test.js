@@ -16,6 +16,8 @@ import {
   buildOrdersCsv,
   buildSafeUpiIntentUrl,
   csvEscapeCell,
+  evaluateAdminLoginLockout,
+  recordAdminLoginFailure,
   validateCheckoutSubmission,
   validateInventoryAdjustment,
   validateOrderLifecycleUpdate,
@@ -25,6 +27,11 @@ import {
   validateUpiPaymentProof,
   withNetworkGuard,
 } from '../src/lib/security.js';
+import {
+  DEFAULT_ADMIN_ROUTE_PATH,
+  isAdminRoutePath,
+  normalizeAdminRoutePath,
+} from '../src/lib/adminRoute.js';
 import { formatInr, STORE_CURRENCY } from '../src/lib/currency.js';
 import { PRODUCTS, mapSupabaseProduct, mergeCatalogProducts } from '../src/data/catalog.js';
 
@@ -436,5 +443,45 @@ test('Live Supabase catalog mapping: maps INR prices and merges cleanly with fal
   assert.equal(merged[0].id, 'db-watch-1');
   assert.equal(merged.length, PRODUCTS.length + 1);
 });
+
+test('Randomized admin URL: blocks predictable /admin slugs and requires opaque path match', () => {
+  assert.equal(normalizeAdminRoutePath('/admin'), DEFAULT_ADMIN_ROUTE_PATH);
+  assert.equal(normalizeAdminRoutePath('/admin-panel'), DEFAULT_ADMIN_ROUTE_PATH);
+  assert.equal(normalizeAdminRoutePath('/login'), DEFAULT_ADMIN_ROUTE_PATH);
+  assert.equal(normalizeAdminRoutePath('/short'), DEFAULT_ADMIN_ROUTE_PATH);
+  assert.equal(normalizeAdminRoutePath('vault-9a8b7c6d5e4f'), '/vault-9a8b7c6d5e4f');
+
+  assert.equal(isAdminRoutePath('/admin'), false);
+  assert.equal(isAdminRoutePath('/admin/orders'), false);
+  assert.equal(isAdminRoutePath(DEFAULT_ADMIN_ROUTE_PATH), true);
+  assert.equal(isAdminRoutePath(`${DEFAULT_ADMIN_ROUTE_PATH}/`), true);
+  assert.equal(isAdminRoutePath('/vault-9a8b7c6d5e4f', '/vault-9a8b7c6d5e4f'), true);
+});
+
+test('Admin login brute-force protection: applies progressive cooldowns after 3, 4, and 5 failures', () => {
+  const t0 = 1_700_000_000_000;
+  let state = { failures: 0, lockedUntil: 0 };
+
+  state = recordAdminLoginFailure(state, t0);
+  assert.equal(evaluateAdminLoginLockout(state, t0).locked, false);
+
+  state = recordAdminLoginFailure(state, t0);
+  assert.equal(evaluateAdminLoginLockout(state, t0).locked, false);
+
+  // 3rd failure -> 15s cooldown
+  state = recordAdminLoginFailure(state, t0);
+  assert.equal(evaluateAdminLoginLockout(state, t0).locked, true);
+  assert.equal(evaluateAdminLoginLockout(state, t0).remainingSeconds, 15);
+
+  // 4th failure -> 60s cooldown
+  state = recordAdminLoginFailure(state, t0 + 20_000);
+  assert.equal(evaluateAdminLoginLockout(state, t0 + 20_000).remainingSeconds, 60);
+
+  // 5th failure -> 300s (5-minute) lockout
+  state = recordAdminLoginFailure(state, t0 + 90_000);
+  assert.equal(evaluateAdminLoginLockout(state, t0 + 90_000).remainingSeconds, 300);
+  assert.equal(evaluateAdminLoginLockout(state, t0 + 90_000 + 301_000).locked, false);
+});
+
 
 

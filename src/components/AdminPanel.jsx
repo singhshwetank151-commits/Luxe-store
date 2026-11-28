@@ -11,6 +11,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  Lock,
   LogOut,
   Package,
   Plus,
@@ -24,17 +25,52 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useAuth, useCatalog, useRouter } from '../context/storeHooks';
+import { ADMIN_ROUTE_PATH } from '../lib/adminRoute';
 import { formatInr } from '../lib/currency';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import {
+  ADMIN_INACTIVITY_TIMEOUT_MS,
+  ADMIN_INACTIVITY_WARN_MS,
   ALLOWED_ORDER_STATUSES,
   buildOrdersCsv,
+  evaluateAdminLoginLockout,
+  recordAdminLoginFailure,
+  safeJsonParse,
+  savePostLoginRedirect,
   validateOrderLifecycleUpdate,
   withNetworkGuard,
 } from '../lib/security';
 import { AdminCatalogManager } from './admin/AdminCatalogManager';
 import { AdminStoreSettings } from './admin/AdminStoreSettings';
 import './AdminPanel.css';
+
+const LOCKOUT_STORAGE_KEY = 'luxe_ops_auth_guard_v1';
+
+function readLoginGuardState() {
+  try {
+    const raw = window.sessionStorage.getItem(LOCKOUT_STORAGE_KEY);
+    if (!raw) return { failures: 0, lockedUntil: 0 };
+    const parsed = safeJsonParse(raw);
+    return {
+      failures: Number(parsed?.failures || 0),
+      lockedUntil: Number(parsed?.lockedUntil || 0),
+    };
+  } catch {
+    return { failures: 0, lockedUntil: 0 };
+  }
+}
+
+function writeLoginGuardState(state) {
+  try {
+    if (!state || (state.failures === 0 && state.lockedUntil === 0)) {
+      window.sessionStorage.removeItem(LOCKOUT_STORAGE_KEY);
+    } else {
+      window.sessionStorage.setItem(LOCKOUT_STORAGE_KEY, JSON.stringify(state));
+    }
+  } catch {
+    // Ignore storage restrictions
+  }
+}
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Activity },
@@ -239,17 +275,27 @@ export function AdminPanel() {
     isAuthenticated,
     isAdmin,
     signInWithAdminPassword,
+    reverifyAdminSession,
     signInWithGoogle,
     signOut,
   } = useAuth();
   const { refreshCatalog } = useCatalog();
   const { navigate } = useRouter();
 
-  // Admin Login Form State
+  // Admin Login Form & Brute-Force Guard State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [loginGuard, setLoginGuard] = useState(() => readLoginGuardState());
+  const [lockoutSecondsLeft, setLockoutSecondsLeft] = useState(() =>
+    evaluateAdminLoginLockout(readLoginGuardState()).remainingSeconds
+  );
+
+  // Inactivity Auto-Lock State (15-minute idle lock)
+  const [idleWarnSecondsLeft, setIdleWarnSecondsLeft] = useState(0);
+  const lastActivityRef = useRef(0);
+  const lastReverifyRef = useRef(0);
 
   // Dashboard UI State
   const [activeTab, setActiveTab] = useState('overview');
@@ -289,6 +335,121 @@ export function AdminPanel() {
     triggerRefresh();
     refreshCatalog();
   }, [triggerRefresh, refreshCatalog]);
+
+  // Enforce noindex + no-referrer while the private admin console is mounted
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = 'Restricted Console';
+
+    const robotsMeta = document.createElement('meta');
+    robotsMeta.name = 'robots';
+    robotsMeta.content = 'noindex, nofollow, noarchive';
+    document.head.appendChild(robotsMeta);
+
+    const existingReferrer = document.querySelector('meta[name="referrer"]');
+    const prevReferrerContent = existingReferrer?.getAttribute('content') || '';
+    let injectedReferrer = null;
+    if (existingReferrer) {
+      existingReferrer.setAttribute('content', 'no-referrer');
+    } else {
+      injectedReferrer = document.createElement('meta');
+      injectedReferrer.name = 'referrer';
+      injectedReferrer.content = 'no-referrer';
+      document.head.appendChild(injectedReferrer);
+    }
+
+    return () => {
+      document.title = prevTitle;
+      robotsMeta.remove();
+      if (existingReferrer) {
+        existingReferrer.setAttribute('content', prevReferrerContent || 'strict-origin-when-cross-origin');
+      } else if (injectedReferrer) {
+        injectedReferrer.remove();
+      }
+    };
+  }, []);
+
+  // Tick login brute-force cooldown countdown
+  useEffect(() => {
+    if (!loginGuard.lockedUntil || loginGuard.lockedUntil <= Date.now()) {
+      setLockoutSecondsLeft(0);
+      return undefined;
+    }
+    const tick = () => {
+      const status = evaluateAdminLoginLockout(loginGuard);
+      setLockoutSecondsLeft(status.remainingSeconds);
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [loginGuard]);
+
+  const handleLockSessionNow = useCallback(
+    async (reason = '') => {
+      await signOut();
+      setIdleWarnSecondsLeft(0);
+      if (reason) {
+        setLoginError(reason);
+      } else {
+        navigate('/', { replace: true });
+      }
+    },
+    [signOut, navigate]
+  );
+
+  // 15-minute inactivity auto-lock for authenticated admin sessions
+  useEffect(() => {
+    if (!isAuthenticated || !isAdmin) {
+      setIdleWarnSecondsLeft(0);
+      return undefined;
+    }
+
+    lastActivityRef.current = Date.now();
+    const markActive = () => {
+      lastActivityRef.current = Date.now();
+      setIdleWarnSecondsLeft(0);
+    };
+
+    const events = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((evt) => window.addEventListener(evt, markActive, { passive: true }));
+
+    const intervalId = window.setInterval(() => {
+      const idleMs = Date.now() - lastActivityRef.current;
+      const remainingMs = ADMIN_INACTIVITY_TIMEOUT_MS - idleMs;
+      if (remainingMs <= 0) {
+        handleLockSessionNow('Session locked after 15 minutes of inactivity. Sign in again.');
+      } else if (remainingMs <= ADMIN_INACTIVITY_WARN_MS) {
+        setIdleWarnSecondsLeft(Math.ceil(remainingMs / 1000));
+      } else {
+        setIdleWarnSecondsLeft(0);
+      }
+    }, 5000);
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, markActive));
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated, isAdmin, handleLockSessionNow]);
+
+  // Re-verify admin role live against Supabase when returning to this browser tab (max once per 60s)
+  useEffect(() => {
+    if (!isAuthenticated || !isAdmin) return undefined;
+    lastReverifyRef.current = Date.now();
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - lastReverifyRef.current < 60000) return;
+      lastReverifyRef.current = Date.now();
+      reverifyAdminSession();
+    };
+
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+    return () => {
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+    };
+  }, [isAuthenticated, isAdmin, reverifyAdminSession]);
 
   // Close proof screenshot lightbox on Escape
   useEffect(() => {
@@ -540,17 +701,47 @@ export function AdminPanel() {
   const handleAdminPasswordSubmit = async (e) => {
     e.preventDefault();
     if (actionLockRef.current.has('admin-login')) return;
+
+    const currentGuard = readLoginGuardState();
+    const lockCheck = evaluateAdminLoginLockout(currentGuard);
+    if (lockCheck.locked) {
+      setLoginGuard(currentGuard);
+      setLockoutSecondsLeft(lockCheck.remainingSeconds);
+      setLoginError(`Too many failed attempts. Try again in ${lockCheck.remainingSeconds}s.`);
+      return;
+    }
+
     actionLockRef.current.add('admin-login');
     setLoginError('');
     setLoginLoading(true);
     const res = await signInWithAdminPassword(loginEmail, loginPassword);
     setLoginLoading(false);
     actionLockRef.current.delete('admin-login');
+
     if (!res.ok) {
-      setLoginError(res.error);
+      const nextGuard = recordAdminLoginFailure(currentGuard);
+      writeLoginGuardState(nextGuard);
+      setLoginGuard(nextGuard);
+      const nextLock = evaluateAdminLoginLockout(nextGuard);
+      setLockoutSecondsLeft(nextLock.remainingSeconds);
+      setLoginError(
+        nextLock.locked
+          ? `Too many failed attempts. Locked for ${nextLock.remainingSeconds}s.`
+          : res.error
+      );
+      setLoginPassword('');
     } else {
+      const cleared = { failures: 0, lockedUntil: 0 };
+      writeLoginGuardState(cleared);
+      setLoginGuard(cleared);
+      setLockoutSecondsLeft(0);
       setLoginPassword('');
     }
+  };
+
+  const handleAdminGoogleSignIn = async () => {
+    savePostLoginRedirect(ADMIN_ROUTE_PATH);
+    await signInWithGoogle();
   };
 
   const handleVerifyDecision = async (verifId, decision) => {
@@ -674,6 +865,7 @@ export function AdminPanel() {
 
   // GATE 1: NOT SIGNED IN
   if (!isAuthenticated) {
+    const isLockedOut = lockoutSecondsLeft > 0;
     return (
       <main className="adm-page">
         <div className="adm-shell">
@@ -682,12 +874,11 @@ export function AdminPanel() {
             <span>Back to store</span>
           </button>
 
-          <section className="adm-gate-card" aria-label="Administrator Sign In">
-            <span className="adm-eyebrow">Luxe Store Administration</span>
-            <h1 className="adm-title">Admin sign in</h1>
+          <section className="adm-gate-card" aria-label="Restricted Sign In">
+            <span className="adm-eyebrow">Restricted Operations</span>
+            <h1 className="adm-title">Operator sign in</h1>
             <p className="adm-subtitle">
-              Restricted to verified administrators with server-assigned <code>admin</code> or{' '}
-              <code>super_admin</code> roles.
+              Authorized personnel only. Sessions automatically lock after 15 minutes of inactivity.
             </p>
 
             {loginError && (
@@ -698,12 +889,13 @@ export function AdminPanel() {
 
             <form className="adm-login-form" onSubmit={handleAdminPasswordSubmit}>
               <label className="adm-field">
-                <span>Administrator email</span>
+                <span>Email address</span>
                 <input
                   type="email"
                   required
                   autoComplete="email"
-                  placeholder="admin@timessellers.com"
+                  disabled={isLockedOut || loginLoading}
+                  placeholder="operator@domain.com"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                 />
@@ -715,22 +907,36 @@ export function AdminPanel() {
                   type="password"
                   required
                   autoComplete="current-password"
-                  placeholder="Enter administrator password"
+                  disabled={isLockedOut || loginLoading}
+                  placeholder="Enter password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                 />
               </label>
 
-              <button type="submit" className="adm-primary-btn adm-full-btn" disabled={loginLoading}>
-                {loginLoading ? 'Verifying credentials...' : 'Sign in to Admin Console'}
+              <button
+                type="submit"
+                className="adm-primary-btn adm-full-btn"
+                disabled={loginLoading || isLockedOut}
+              >
+                {isLockedOut
+                  ? `Locked (${lockoutSecondsLeft}s)`
+                  : loginLoading
+                  ? 'Verifying credentials...'
+                  : 'Sign in'}
               </button>
             </form>
 
             <div className="adm-gate-divider">
-              <span>or if your admin role uses Google SSO</span>
+              <span>or continue with verified SSO</span>
             </div>
 
-            <button type="button" className="adm-secondary-btn adm-full-btn" onClick={signInWithGoogle}>
+            <button
+              type="button"
+              className="adm-secondary-btn adm-full-btn"
+              disabled={isLockedOut}
+              onClick={handleAdminGoogleSignIn}
+            >
               Continue with Google
             </button>
           </section>
@@ -739,7 +945,7 @@ export function AdminPanel() {
     );
   }
 
-  // GATE 2: SIGNED IN WITHOUT ADMIN ROLE (403 DENY-BY-DEFAULT)
+  // GATE 2: SIGNED IN WITHOUT ADMIN ROLE (403 DENY-BY-DEFAULT — ZERO SCHEMA DISCLOSURE)
   if (!isAdmin) {
     return (
       <main className="adm-page">
@@ -753,17 +959,15 @@ export function AdminPanel() {
             <div className="adm-denied-icon">
               <ShieldAlert size={28} strokeWidth={1.6} />
             </div>
-            <span className="adm-eyebrow">HTTP 403 · Authorization required</span>
-            <h1 className="adm-title">Admin access denied</h1>
+            <span className="adm-eyebrow">HTTP 403 · Forbidden</span>
+            <h1 className="adm-title">Access denied</h1>
             <p className="adm-subtitle">
-              Signed in as <strong>{user.email}</strong>, which carries the <code>{user.role}</code>{' '}
-              role. Server-side RLS and RPC guards allow access only to accounts assigned{' '}
-              <code>admin</code> or <code>super_admin</code> in <code>public.user_roles</code>.
+              Your current account does not have permission to view this area.
             </p>
 
             <div className="adm-gate-actions">
-              <button type="button" className="adm-secondary-btn" onClick={() => navigate('/profile')}>
-                Go to profile
+              <button type="button" className="adm-secondary-btn" onClick={() => navigate('/')}>
+                Return to storefront
               </button>
               <button
                 type="button"
@@ -813,9 +1017,17 @@ export function AdminPanel() {
             <button
               type="button"
               className="adm-secondary-btn"
+              onClick={() => handleLockSessionNow('Console locked manually.')}
+            >
+              <Lock size={16} strokeWidth={1.5} />
+              <span>Lock now</span>
+            </button>
+            <button
+              type="button"
+              className="adm-secondary-btn"
               onClick={async () => {
                 await signOut();
-                navigate('/admin', { replace: true });
+                navigate('/', { replace: true });
               }}
             >
               <LogOut size={16} strokeWidth={1.5} />
@@ -823,6 +1035,24 @@ export function AdminPanel() {
             </button>
           </div>
         </header>
+
+        {idleWarnSecondsLeft > 0 && (
+          <div className="adm-banner adm-banner-error" role="alert">
+            <span>
+              Inactivity auto-lock in {idleWarnSecondsLeft}s. Interact or click Stay signed in to keep working.
+            </span>
+            <button
+              type="button"
+              className="adm-secondary-btn"
+              onClick={() => {
+                lastActivityRef.current = Date.now();
+                setIdleWarnSecondsLeft(0);
+              }}
+            >
+              Stay signed in
+            </button>
+          </div>
+        )}
 
         {feedback && (
           <div

@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { stripBase, withBase } from '../lib/basePath';
+import { isAdminRoutePath } from '../lib/adminRoute';
 import { isSafeRoutePath } from '../lib/security';
 import { RouterContext } from './storeHooks';
 
 function normalizeRoute(pathname, hash) {
   const stripped = stripBase(pathname);
   const path = stripped && stripped !== '/' ? stripped : '';
+  if (isAdminRoutePath(path)) {
+    return { view: 'admin', productId: null };
+  }
   if (path.startsWith('/collection') || hash === '#collection') {
     return { view: 'collection', productId: null };
   }
@@ -14,9 +18,6 @@ function normalizeRoute(pathname, hash) {
   }
   if (path.startsWith('/checkout') || hash === '#checkout') {
     return { view: 'checkout', productId: null };
-  }
-  if (path.startsWith('/admin') || hash === '#admin') {
-    return { view: 'admin', productId: null };
   }
   if (path.startsWith('/signin') || hash === '#signin') {
     return { view: 'signin', productId: null };
@@ -43,8 +44,24 @@ export function RouterProvider({ children }) {
     normalizeRoute(window.location.pathname, window.location.hash)
   );
 
+  // Silently scrub predictable /admin or #admin probe URLs back to home
+  useEffect(() => {
+    const stripped = stripBase(window.location.pathname);
+    if (
+      stripped === '/admin' ||
+      stripped.startsWith('/admin/') ||
+      window.location.hash === '#admin'
+    ) {
+      window.history.replaceState({}, '', withBase('/'));
+    }
+  }, []);
+
   useEffect(() => {
     const onPopState = () => {
+      const stripped = stripBase(window.location.pathname);
+      if (stripped === '/admin' || stripped.startsWith('/admin/')) {
+        window.history.replaceState({}, '', withBase('/'));
+      }
       setRoute(normalizeRoute(window.location.pathname, window.location.hash));
     };
     window.addEventListener('popstate', onPopState);

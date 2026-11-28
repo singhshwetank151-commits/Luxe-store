@@ -8,6 +8,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth, useCart, useRouter } from '../context/storeHooks';
+import { ADMIN_ROUTE_PATH } from '../lib/adminRoute';
 import { withBase } from '../lib/basePath';
 
 export function Header() {
@@ -107,7 +108,7 @@ export function Header() {
               type="button"
               className={`header-auth-btn header-desktop-only ${route.view === 'admin' ? 'is-active' : ''}`}
               aria-label="Admin Console"
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate(ADMIN_ROUTE_PATH)}
             >
               <span>Admin</span>
             </button>
@@ -223,7 +224,7 @@ export function Header() {
             <button
               type="button"
               className={`mobile-nav-item ${route.view === 'admin' ? 'is-active' : ''}`}
-              onClick={() => handleMobileNavigate('/admin')}
+              onClick={() => handleMobileNavigate(ADMIN_ROUTE_PATH)}
             >
               <ShieldCheck size={16} strokeWidth={1.5} />
               <span>Admin</span>

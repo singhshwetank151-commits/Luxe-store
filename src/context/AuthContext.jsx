@@ -273,12 +273,20 @@ export function AuthProvider({ children }) {
   const signInWithAdminPassword = useCallback(
     async (email, password) => {
       if (!isSupabaseConfigured || !supabase) {
-        return { ok: false, error: 'Supabase is not configured.' };
+        return { ok: false, error: 'Authentication service is unavailable.' };
       }
       const cleanEmail = String(email || '').trim().toLowerCase();
       if (!cleanEmail || !password) {
-        return { ok: false, error: 'Admin email and password are required.' };
+        return { ok: false, error: 'Email and password are required.' };
       }
+
+      const startedAt = Date.now();
+      const enforceMinFailureDelay = async () => {
+        const elapsed = Date.now() - startedAt;
+        if (elapsed < 400) {
+          await new Promise((resolve) => setTimeout(resolve, 400 - elapsed));
+        }
+      };
 
       try {
         const { data, error } = await withNetworkGuard(
@@ -289,24 +297,51 @@ export function AuthProvider({ children }) {
           15000
         );
         if (error || !data?.user) {
-          return { ok: false, error: error?.message || 'Invalid admin credentials.' };
+          await enforceMinFailureDelay();
+          return { ok: false, error: 'Invalid credentials or insufficient privileges.' };
         }
         const hydrated = await hydrateUser(data.user);
         if (!hydrated?.isAdmin) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut().catch(() => undefined);
           setUser(null);
-          return { ok: false, error: 'Access denied: Administrator privileges required.' };
+          await enforceMinFailureDelay();
+          return { ok: false, error: 'Invalid credentials or insufficient privileges.' };
         }
         return { ok: true, user: hydrated };
-      } catch (err) {
+      } catch {
+        await enforceMinFailureDelay();
         return {
           ok: false,
-          error: err instanceof Error ? err.message : 'Unable to sign in right now.',
+          error: 'Unable to verify credentials right now. Please try again.',
         };
       }
     },
     [hydrateUser]
   );
+
+  const reverifyAdminSession = useCallback(async () => {
+    if (!isSupabaseConfigured || !supabase) return false;
+    try {
+      const {
+        data: { user: verifiedUser },
+        error: userErr,
+      } = await withNetworkGuard(supabase.auth.getUser(), 10000);
+      if (userErr || !verifiedUser) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+        setUser(null);
+        return false;
+      }
+      const hydrated = await hydrateUser(verifiedUser);
+      if (!hydrated?.isAdmin) {
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+        setUser(null);
+        return false;
+      }
+      return true;
+    } catch {
+      return true; // Do not lock out on transient offline blip
+    }
+  }, [hydrateUser]);
 
   const deleteOwnAccount = useCallback(async () => {
     if (!user || !supabase) {
@@ -359,6 +394,7 @@ export function AuthProvider({ children }) {
       needsOnboarding,
       signInWithGoogle,
       signInWithAdminPassword,
+      reverifyAdminSession,
       saveProfile,
       deleteOwnAccount,
       signOut,
@@ -371,6 +407,7 @@ export function AuthProvider({ children }) {
       needsOnboarding,
       signInWithGoogle,
       signInWithAdminPassword,
+      reverifyAdminSession,
       saveProfile,
       deleteOwnAccount,
       signOut,
