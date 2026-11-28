@@ -1,0 +1,429 @@
+import { getDefaultVariant, getProductById } from '../data/catalog.js';
+
+export const MAX_ITEM_QUANTITY = 10;
+export const MAX_CART_DISTINCT_ITEMS = 25;
+
+export const ALLOWED_FINISH_OPTIONS = Object.freeze([
+  '18K Yellow Gold',
+  '18K Rose Gold',
+  'Brushed Stainless Steel',
+  'Obsidian Titanium PVD',
+  'Crimson Ceramic Edition',
+]);
+
+export const ALLOWED_ORDER_STATUSES = Object.freeze([
+  'pending_payment',
+  'payment_verification',
+  'confirmed',
+  'processing',
+  'shipped',
+  'out_for_delivery',
+  'delivered',
+  'cancelled',
+  'refunded',
+]);
+
+export function validateInventoryAdjustment({ quantity, threshold, notes }) {
+  const qty = Number(quantity);
+  if (!Number.isInteger(qty) || qty < 0 || qty > 100000) {
+    return { ok: false, error: 'Stock quantity must be a whole number between 0 and 100,000.' };
+  }
+  const thresh = threshold === '' || threshold === null || threshold === undefined ? null : Number(threshold);
+  if (thresh !== null && (!Number.isInteger(thresh) || thresh < 0 || thresh > 10000)) {
+    return { ok: false, error: 'Low-stock threshold must be between 0 and 10,000.' };
+  }
+  return {
+    ok: true,
+    quantity: qty,
+    threshold: thresh,
+    notes: sanitizePlainText(notes || 'Manual inventory adjustment by administrator', 200),
+  };
+}
+
+export function validateOrderLifecycleUpdate({ status, trackingNumber, courierPartner, trackingUrl, note }) {
+  if (!ALLOWED_ORDER_STATUSES.includes(status)) {
+    return { ok: false, error: 'Invalid delivery status selected.' };
+  }
+  const cleanUrl = String(trackingUrl || '').trim();
+  if (cleanUrl && !/^https:\/\/[^\s<>]+$/i.test(cleanUrl)) {
+    return { ok: false, error: 'Tracking URL must start with https://.' };
+  }
+  return {
+    ok: true,
+    status,
+    trackingNumber: sanitizePlainText(trackingNumber, 80) || null,
+    courierPartner: sanitizePlainText(courierPartner, 80) || null,
+    trackingUrl: cleanUrl.slice(0, 240) || null,
+    note: sanitizePlainText(note, 240) || null,
+  };
+}
+
+function stripControlAndAngleBrackets(str) {
+  let out = '';
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f || code === 60 || code === 62) {
+      out += ' ';
+    } else {
+      out += str[i];
+    }
+  }
+  return out;
+}
+
+function containsControlChar(str) {
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
+function stripControlCharsOnly(str) {
+  let out = '';
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    out += code <= 0x1f || code === 0x7f ? ' ' : str[i];
+  }
+  return out;
+}
+
+/**
+ * Normalize user-facing text while preserving emojis, Unicode/Arabic, and escaping `<`/`>` at render time.
+ */
+export function normalizeUserText(value, maxLength = 240) {
+  return stripControlCharsOnly(String(value ?? ''))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+/**
+ * Fail fast when offline and abort stalled network promises after timeoutMs.
+ */
+export async function withNetworkGuard(operation, timeoutMs = 15000) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error('You appear to be offline. Please check your connection and try again.');
+  }
+
+  let timerId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timerId = setTimeout(() => {
+      reject(new Error('Request timed out on slow connection. Please try again.'));
+    }, timeoutMs);
+  });
+
+  try {
+    const promise = typeof operation === 'function' ? operation() : operation;
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timerId);
+  }
+}
+
+/**
+ * Strip control chars and angle brackets from plain-text inputs/URL error strings.
+ */
+export function sanitizePlainText(value, maxLength = 240) {
+  return stripControlAndAngleBrackets(String(value ?? ''))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+/**
+ * Validate internal navigation routes to prevent open redirects (`//evil.com`, `javascript:`).
+ */
+export function isSafeRoutePath(path) {
+  if (typeof path !== 'string') return false;
+  const trimmed = path.trim();
+  if (!trimmed.startsWith('/')) return false;
+  if (trimmed.startsWith('//') || trimmed.startsWith('/\\')) return false;
+  if (containsControlChar(trimmed)) return false;
+  return true;
+}
+
+const POST_LOGIN_REDIRECT_KEY = 'luxe_store_post_login_redirect';
+
+export function savePostLoginRedirect(path) {
+  if (typeof window === 'undefined' || !isSafeRoutePath(path)) return;
+  try {
+    window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, path.trim());
+  } catch {
+    // Ignore restricted storage environments
+  }
+}
+
+export function consumePostLoginRedirect() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+    window.sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+    return isSafeRoutePath(raw) ? raw.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function sanitizeAuthUrlError(rawError) {
+  const cleaned = sanitizePlainText(rawError, 180);
+  if (!cleaned) return '';
+  return cleaned;
+}
+
+/**
+ * Prototype-pollution-safe JSON parser (strips `__proto__`, `constructor`, `prototype`).
+ */
+export function safeJsonParse(raw) {
+  if (typeof raw !== 'string' || raw.length > 65536) return null;
+  try {
+    return JSON.parse(raw, (key, value) => {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        return undefined;
+      }
+      return value;
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Linear-time email validation immune to ReDoS.
+ */
+export function isValidEmail(email) {
+  if (typeof email !== 'string' || email.length < 5 || email.length > 160) return false;
+  if (/\s/.test(email)) return false;
+  const atIdx = email.indexOf('@');
+  if (atIdx <= 0 || atIdx !== email.lastIndexOf('@')) return false;
+  const local = email.slice(0, atIdx);
+  const domain = email.slice(atIdx + 1);
+  if (!local || !domain || local.length > 64 || domain.length > 95) return false;
+  const dotIdx = domain.indexOf('.');
+  if (dotIdx <= 0 || dotIdx >= domain.length - 1 || domain.endsWith('.')) return false;
+  return true;
+}
+
+export function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+export function normalizePhoneDigits(phone) {
+  return String(phone || '').replace(/\D/g, '');
+}
+
+/**
+ * Re-hydrate persisted cart items strictly from authoritative catalog metadata.
+ * Discards manipulated prices, titles, images, non-integer quantities, and unknown SKUs.
+ */
+export function sanitizeCartItems(rawItems, lookupProduct = getProductById) {
+  if (!Array.isArray(rawItems)) return [];
+
+  const deduped = new Map();
+
+  for (const entry of rawItems) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (deduped.size >= MAX_CART_DISTINCT_ITEMS) break;
+
+    const product = lookupProduct(entry.productId);
+    if (!product) continue;
+
+    const variant =
+      (entry.variantId &&
+        product.variants?.find((v) => v.id === entry.variantId && v.available !== false)) ||
+      getDefaultVariant(product);
+    if (!variant || variant.available === false) continue;
+
+    const rawQty = Number(entry.quantity);
+    if (!Number.isInteger(rawQty) || rawQty < 1) continue;
+
+    const key = `${product.id}::${variant.id}`;
+    const existing = deduped.get(key);
+    const nextQty = Math.min(MAX_ITEM_QUANTITY, (existing?.quantity || 0) + rawQty);
+
+    deduped.set(key, {
+      productId: product.id,
+      variantId: variant.id,
+      variantLabel: variant.label,
+      title: product.title,
+      price: product.price,
+      formattedPrice: product.formattedPrice,
+      image: product.image,
+      quantity: nextQty,
+    });
+  }
+
+  return Array.from(deduped.values());
+}
+
+/**
+ * Calculate authoritative cart totals strictly from catalog prices and validated integer quantities.
+ */
+export function calculateAuthoritativeCartTotals(rawItems, lookupProduct = getProductById) {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    return { ok: false, error: 'Your shopping basket is empty.', items: [], subtotal: 0, shipping: 0, total: 0, itemCount: 0 };
+  }
+
+  if (rawItems.length > MAX_CART_DISTINCT_ITEMS) {
+    return {
+      ok: false,
+      error: `Basket cannot exceed ${MAX_CART_DISTINCT_ITEMS} distinct items.`,
+      items: [],
+      subtotal: 0,
+      shipping: 0,
+      total: 0,
+      itemCount: 0,
+    };
+  }
+
+  const normalizedItems = [];
+  let subtotal = 0;
+  let itemCount = 0;
+
+  for (const entry of rawItems) {
+    if (!entry || typeof entry !== 'object') {
+      return { ok: false, error: 'Invalid cart item payload.' };
+    }
+
+    const product = lookupProduct(entry.productId);
+    if (!product) {
+      return { ok: false, error: 'One or more products in your basket are invalid or unavailable.' };
+    }
+
+    const variant = product.variants?.find((v) => v.id === entry.variantId && v.available !== false);
+    if (!variant) {
+      return { ok: false, error: `Selected variant for ${product.title} is unavailable.` };
+    }
+
+    const qty = Number(entry.quantity);
+    if (!Number.isInteger(qty) || qty < 1 || qty > MAX_ITEM_QUANTITY) {
+      return {
+        ok: false,
+        error: `Quantity for ${product.title} must be an integer between 1 and ${MAX_ITEM_QUANTITY}.`,
+      };
+    }
+
+    // Reject client-side price tampering if caller passed a mismatched price
+    if (entry.price !== undefined && Number(entry.price) !== product.price) {
+      return {
+        ok: false,
+        error: `Price mismatch detected for ${product.title}. Please refresh your basket.`,
+      };
+    }
+
+    const lineTotal = Math.round(product.price * qty * 100) / 100;
+    subtotal = Math.round((subtotal + lineTotal) * 100) / 100;
+    itemCount += qty;
+
+    normalizedItems.push({
+      productId: product.id,
+      variantId: variant.id,
+      variantLabel: variant.label,
+      title: product.title,
+      price: product.price,
+      formattedPrice: product.formattedPrice,
+      image: product.image,
+      quantity: qty,
+      lineTotal,
+    });
+  }
+
+  const shipping = 0; // Complimentary insured courier
+  const total = subtotal + shipping;
+
+  return {
+    ok: true,
+    items: normalizedItems,
+    subtotal,
+    shipping,
+    total,
+    itemCount,
+  };
+}
+
+export function validateCheckoutSubmission(
+  { items, customerName, customerEmail, customerPhone, shippingAddress, cityPostal },
+  lookupProduct = getProductById
+) {
+  const quote = calculateAuthoritativeCartTotals(items, lookupProduct);
+  if (!quote.ok) {
+    return { ok: false, error: quote.error };
+  }
+
+  const cleanName = normalizeUserText(customerName, 100);
+  const cleanEmail = normalizeEmail(customerEmail);
+  const cleanPhone = normalizeUserText(customerPhone, 24);
+  const cleanAddress = normalizeUserText(shippingAddress, 200);
+  const cleanCityPostal = normalizeUserText(cityPostal, 120);
+
+  if (cleanName.length < 2) {
+    return { ok: false, error: 'Please enter a valid full name (at least 2 characters).' };
+  }
+  if (!isValidEmail(cleanEmail)) {
+    return { ok: false, error: 'Please enter a valid email address.' };
+  }
+  const phoneDigits = normalizePhoneDigits(cleanPhone);
+  if (cleanPhone && (phoneDigits.length < 7 || phoneDigits.length > 15)) {
+    return { ok: false, error: 'Please enter a valid phone number (7–15 digits).' };
+  }
+  if (cleanAddress.length < 5) {
+    return { ok: false, error: 'Please enter a complete street delivery address.' };
+  }
+  if (cityPostal !== undefined && cleanCityPostal.length < 2) {
+    return { ok: false, error: 'Please enter your city and postal code.' };
+  }
+
+  return {
+    ok: true,
+    quote,
+    customer: {
+      fullName: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      shippingAddress: cleanAddress,
+      cityPostal: cleanCityPostal,
+    },
+  };
+}
+
+export function validateProfileInput(profileData, authenticatedEmail) {
+  const fullName = normalizeUserText(profileData?.fullName, 100);
+  const verifiedEmail = normalizeEmail(authenticatedEmail || profileData?.email);
+  const phone = normalizeUserText(profileData?.phone, 24);
+  const address = normalizeUserText(profileData?.address, 200);
+  const city = normalizeUserText(profileData?.city, 80);
+  const postalCode = normalizeUserText(profileData?.postalCode, 24);
+  const country = normalizeUserText(profileData?.country, 80);
+  const requestedFinish = normalizeUserText(profileData?.preferredFinish, 60);
+  const preferredFinish = ALLOWED_FINISH_OPTIONS.includes(requestedFinish)
+    ? requestedFinish
+    : ALLOWED_FINISH_OPTIONS[0];
+
+  if (fullName.length < 2) {
+    return { ok: false, error: 'Please enter your full name.' };
+  }
+  if (!isValidEmail(verifiedEmail)) {
+    return { ok: false, error: 'A verified Google account email is required.' };
+  }
+  const phoneDigits = normalizePhoneDigits(phone);
+  if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+    return { ok: false, error: 'Please enter a valid phone number (7–15 digits).' };
+  }
+  if (address.length < 4 || city.length < 2 || postalCode.length < 3 || country.length < 2) {
+    return { ok: false, error: 'Please complete your delivery address details.' };
+  }
+
+  return {
+    ok: true,
+    data: {
+      fullName,
+      email: verifiedEmail,
+      phone,
+      address,
+      city,
+      postalCode,
+      country,
+      preferredFinish,
+    },
+  };
+}

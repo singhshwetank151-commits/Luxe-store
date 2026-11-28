@@ -1,0 +1,170 @@
+name: Deploy to Altare.gg VPS
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+concurrency:
+  group: 'altare-vps-deploy'
+  cancel-in-progress: true
+
+jobs:
+  deploy-vps:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check VPS configuration
+        id: check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -n "${VPS_HOST:-}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "VPS_HOST secret not set yet — skipping Altare.gg VPS deploy."
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.check.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.check.outputs.enabled == 'true'
+        run: npm ci
+
+      - name: Run tests
+        if: steps.check.outputs.enabled == 'true'
+        run: npm test
+
+      - name: Build production bundle (root path)
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          VITE_BASE_PATH: /
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      - name: Bootstrap, upload bundle & start server on Altare.gg VPS
+        if: steps.check.outputs.enabled == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          CF_TUNNEL_TOKEN: ${{ secrets.CF_TUNNEL_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          PORT="${VPS_PORT:-22}"
+          USER="${VPS_USER:-root}"
+          TARGET_DIR="${VPS_DEPLOY_PATH:-/opt/luxe-store}"
+
+          SSH_OPTS="-p ${PORT} -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
+          SSH_PREFIX=""
+
+          if [ -n "${VPS_SSH_KEY:-}" ]; then
+            mkdir -p ~/.ssh
+            printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            SSH_OPTS="${SSH_OPTS} -i ~/.ssh/deploy_key"
+          elif [ -n "${VPS_PASSWORD:-}" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq sshpass >/dev/null
+            SSH_OPTS="-p ${PORT} -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new"
+            SSH_PREFIX="sshpass -e"
+            export SSHPASS="${VPS_PASSWORD}"
+          else
+            echo "Error: Set either VPS_SSH_KEY or VPS_PASSWORD in GitHub Repository Secrets."
+            exit 1
+          fi
+
+          # Auto-bootstrap VPS on first run (installs rsync, Node 22, cloudflared, and start.sh if missing)
+          ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" "
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            mkdir -p '${TARGET_DIR}/deploy' '${TARGET_DIR}/dist.new' '${TARGET_DIR}/logs'
+
+            if ! command -v rsync >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+              apt-get update -qq
+              apt-get install -y -qq curl ca-certificates gnupg rsync >/dev/null
+            fi
+
+            if ! command -v node >/dev/null 2>&1 || [ \"\$(node -v | sed 's/^v//' | cut -d. -f1)\" -lt 18 ]; then
+              curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
+              apt-get install -y -qq nodejs >/dev/null
+            fi
+
+            if ! command -v cloudflared >/dev/null 2>&1; then
+              ARCH=\"\$(dpkg --print-architecture)\"
+              curl -fsSL \"https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-\${ARCH}.deb\" -o /tmp/cloudflared.deb
+              dpkg -i /tmp/cloudflared.deb >/dev/null
+              rm -f /tmp/cloudflared.deb
+            fi
+
+            cat > '${TARGET_DIR}/start.sh' <<'STARTEOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          APP_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"
+          export HOST=127.0.0.1
+          export PORT=8080
+          export DIST_DIR=\"\${APP_DIR}/dist\"
+
+          if [ -f \"\${APP_DIR}/server.pid\" ]; then
+            OLD_PID=\$(cat \"\${APP_DIR}/server.pid\" || true)
+            if [ -n \"\${OLD_PID}\" ] && kill -0 \"\${OLD_PID}\" 2>/dev/null; then
+              kill \"\${OLD_PID}\" || true
+              sleep 1
+            fi
+          fi
+
+          if command -v systemctl >/dev/null 2>&1 && systemctl is-system-running >/dev/null 2>&1 && systemctl list-unit-files | grep -q '^luxe-store.service'; then
+            systemctl restart luxe-store
+          else
+            nohup node \"\${APP_DIR}/deploy/server.mjs\" </dev/null >> \"\${APP_DIR}/logs/server.log\" 2>&1 &
+            echo \$! > \"\${APP_DIR}/server.pid\"
+          fi
+          STARTEOF
+            chmod +x '${TARGET_DIR}/start.sh'
+          "
+
+          # Upload built dist/ to dist.new and sync deploy/server.mjs
+          ${SSH_PREFIX} rsync -az --delete -e "ssh ${SSH_OPTS}" \
+            ./dist/ "${USER}@${VPS_HOST}:${TARGET_DIR}/dist.new/"
+
+          ${SSH_PREFIX} rsync -az -e "ssh ${SSH_OPTS}" \
+            ./deploy/server.mjs "${USER}@${VPS_HOST}:${TARGET_DIR}/deploy/server.mjs"
+
+          # Atomic swap of dist/ + restart server
+          ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" "
+            set -euo pipefail
+            rm -rf '${TARGET_DIR}/dist.old'
+            if [ -d '${TARGET_DIR}/dist' ]; then
+              mv '${TARGET_DIR}/dist' '${TARGET_DIR}/dist.old'
+            fi
+            mv '${TARGET_DIR}/dist.new' '${TARGET_DIR}/dist'
+            rm -rf '${TARGET_DIR}/dist.old'
+            '${TARGET_DIR}/start.sh'
+          "
+
+          # Optionally start Cloudflare Tunnel if CF_TUNNEL_TOKEN secret is provided
+          if [ -n "${CF_TUNNEL_TOKEN:-}" ]; then
+            CLEAN_TOKEN="$(printf '%s' "${CF_TUNNEL_TOKEN}" | tr -d '\r\n' | awk '{print $NF}')"
+            printf '%s' "${CLEAN_TOKEN}" | ${SSH_PREFIX} ssh ${SSH_OPTS} "${USER}@${VPS_HOST}" "
+              set -euo pipefail
+              umask 077
+              cat > '${TARGET_DIR}/.cf_token'
+              if ! pgrep -f 'cloudflared tunnel' >/dev/null 2>&1; then
+                TUNNEL_TOKEN=\"\$(cat '${TARGET_DIR}/.cf_token')\" nohup cloudflared tunnel --no-autoupdate run </dev/null >> '${TARGET_DIR}/logs/cloudflared.log' 2>&1 &
+                echo \$! > '${TARGET_DIR}/cloudflared.pid'
+              fi
+            "
+          fi
