@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ArrowLeft, Minus, Plus, Trash2, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { useAuth, useCart, useRouter } from '../context/storeHooks';
+import { formatInr } from '../lib/currency';
 import {
   MAX_ITEM_QUANTITY,
   savePostLoginRedirect,
@@ -197,7 +198,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                                   {item.variantLabel} · Qty {item.quantity}
                                 </small>
                               </div>
-                              <strong>${(item.price * item.quantity).toLocaleString('en-US')}</strong>
+                              <strong>{formatInr(item.price * item.quantity)}</strong>
                             </li>
                           ))}
                         </ul>
@@ -223,7 +224,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                               {item.title}
                             </button>
                             <p className="cp-item-variant">{item.variantLabel}</p>
-                            <p className="cp-item-unit">{item.formattedPrice} each</p>
+                            <p className="cp-item-unit">{formatInr(item.price)} each</p>
                           </div>
 
                           <div className="cp-item-qty">
@@ -247,7 +248,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
 
                           <div className="cp-item-right">
                             <strong className="cp-item-total">
-                              ${(item.price * item.quantity).toLocaleString('en-US')}
+                              {formatInr(item.price * item.quantity)}
                             </strong>
                             <button
                               type="button"
@@ -272,7 +273,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
                   <div className="cp-summary-lines">
                     <div className="cp-summary-line">
                       <span>Subtotal ({cartCount} {cartCount === 1 ? 'piece' : 'pieces'})</span>
-                      <span>${subtotal.toLocaleString('en-US')}</span>
+                      <span>{formatInr(subtotal)}</span>
                     </div>
                     <div className="cp-summary-line">
                       <span>Insured courier delivery</span>
@@ -282,7 +283,7 @@ function ScopedCartPage({ initialMode, user, isAuthenticated }) {
 
                   <div className="cp-summary-total">
                     <span>Total</span>
-                    <strong>${subtotal.toLocaleString('en-US')}</strong>
+                    <strong>{formatInr(subtotal)}</strong>
                   </div>
 
                   {checkoutError && (

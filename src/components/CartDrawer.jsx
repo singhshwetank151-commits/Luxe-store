@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { X, Plus, Minus, Trash2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useAuth, useCart } from '../context/storeHooks';
 import { MAX_ITEM_QUANTITY, validateCheckoutSubmission } from '../lib/security';
+import { formatInr } from '../lib/currency';
 import './CartDrawer.css';
 
 function ScopedCartDrawer({ user, isAuthenticated }) {
@@ -122,7 +123,7 @@ function ScopedCartDrawer({ user, isAuthenticated }) {
                         <span>
                           {item.title} × {item.quantity}
                         </span>
-                        <strong>${(item.price * item.quantity).toLocaleString('en-US')}</strong>
+                        <strong>{formatInr(item.price * item.quantity)}</strong>
                       </li>
                     ))}
                   </ul>
@@ -181,7 +182,7 @@ function ScopedCartDrawer({ user, isAuthenticated }) {
               <div className="cart-footer">
                 <div className="cart-subtotal-row">
                   <span>TOTAL</span>
-                  <strong>${subtotal.toLocaleString('en-US')}</strong>
+                  <strong>{formatInr(subtotal)}</strong>
                 </div>
                 <button
                   type="submit"
@@ -244,7 +245,7 @@ function ScopedCartDrawer({ user, isAuthenticated }) {
             <div className="cart-footer">
               <div className="cart-subtotal-row">
                 <span>SUBTOTAL</span>
-                <strong>${subtotal.toLocaleString('en-US')}</strong>
+                <strong>{formatInr(subtotal)}</strong>
               </div>
               {items.length > 0 ? (
                 <button

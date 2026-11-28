@@ -13,6 +13,9 @@ const ProductDetailPage = lazy(() =>
   import('./components/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage }))
 );
 const CartPage = lazy(() => import('./components/CartPage').then((m) => ({ default: m.CartPage })));
+const CheckoutPage = lazy(() =>
+  import('./components/CheckoutPage').then((m) => ({ default: m.CheckoutPage }))
+);
 const AuthPage = lazy(() => import('./components/AuthPage').then((m) => ({ default: m.AuthPage })));
 const AdminPanel = lazy(() =>
   import('./components/AdminPanel').then((m) => ({ default: m.AdminPanel }))
@@ -51,7 +54,7 @@ function AppRoutes() {
         )}
         {route.view === 'product' && <ProductDetailPage productId={route.productId} />}
         {route.view === 'cart' && <CartPage key="cart" initialMode="cart" />}
-        {route.view === 'checkout' && <CartPage key="checkout" initialMode="checkout" />}
+        {route.view === 'checkout' && <CheckoutPage />}
         {route.view === 'admin' && <AdminPanel />}
         {(route.view === 'signin' || route.view === 'profile' || route.view === 'account') && (
           <AuthPage />

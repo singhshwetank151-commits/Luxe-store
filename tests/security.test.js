@@ -12,12 +12,16 @@ import {
   sanitizeAuthUrlError,
   sanitizeCartItems,
   sanitizePlainText,
+  MAX_PROOF_FILE_BYTES,
+  buildSafeUpiIntentUrl,
   validateCheckoutSubmission,
   validateInventoryAdjustment,
   validateOrderLifecycleUpdate,
   validateProfileInput,
+  validateUpiPaymentProof,
   withNetworkGuard,
 } from '../src/lib/security.js';
+import { formatInr, STORE_CURRENCY } from '../src/lib/currency.js';
 import { PRODUCTS } from '../src/data/catalog.js';
 
 const sampleProduct = PRODUCTS[0];
@@ -225,3 +229,79 @@ test('Slow network guard: times out hung requests cleanly instead of leaving end
   const okResult = await withNetworkGuard(Promise.resolve('done'), 100);
   assert.equal(okResult, 'done');
 });
+
+test('Currency formatting: formats prices in INR and keeps all catalog prices in ₹', () => {
+  assert.equal(STORE_CURRENCY, 'INR');
+  assert.equal(formatInr(14800), '₹14,800');
+  assert.equal(formatInr(125000), '₹1,25,000');
+  assert.equal(formatInr(14800.5), '₹14,800.50');
+  assert.equal(formatInr(NaN), '₹0');
+  assert.equal(
+    PRODUCTS.every((product) => product.formattedPrice.startsWith('₹') && !product.formattedPrice.includes('$')),
+    true
+  );
+});
+
+test('UPI payment proof validation: enforces UTR format, optional VPA, and safe image MIME/size limits', () => {
+  const validProof = validateUpiPaymentProof({
+    utrNumber: ' 4231 9988 1234 ',
+    payerUpiId: 'client.name@okaxis',
+    customerNote: 'Paid via Google Pay',
+    file: { type: 'image/png', size: 1024 * 512 },
+  });
+  assert.equal(validProof.ok, true);
+  assert.equal(validProof.data.utrNumber, '423199881234');
+  assert.equal(validProof.data.payerUpiId, 'client.name@okaxis');
+
+  // Short or invalid UTR rejected
+  assert.equal(validateUpiPaymentProof({ utrNumber: '12345' }).ok, false);
+  assert.equal(validateUpiPaymentProof({ utrNumber: 'UTR-<script>' }).ok, false);
+
+  // Invalid VPA rejected
+  assert.equal(
+    validateUpiPaymentProof({ utrNumber: '423199881234', payerUpiId: 'not-a-upi-id' }).ok,
+    false
+  );
+
+  // Disallowed file types (SVG / PDF) and oversized files rejected
+  assert.equal(
+    validateUpiPaymentProof({
+      utrNumber: '423199881234',
+      file: { type: 'image/svg+xml', size: 1024 },
+    }).ok,
+    false
+  );
+  assert.equal(
+    validateUpiPaymentProof({
+      utrNumber: '423199881234',
+      file: { type: 'application/pdf', size: 1024 },
+    }).ok,
+    false
+  );
+  assert.equal(
+    validateUpiPaymentProof({
+      utrNumber: '423199881234',
+      file: { type: 'image/jpeg', size: MAX_PROOF_FILE_BYTES + 1 },
+    }).ok,
+    false
+  );
+});
+
+test('UPI intent URL builder: generates strict INR upi://pay links and rejects unsafe inputs', () => {
+  const url = buildSafeUpiIntentUrl({
+    upiId: 'shw2100@ibl',
+    payeeName: 'TIMESSELLERS',
+    amount: 14800,
+    orderNumber: 'LX-20261127-1234',
+  });
+  assert.ok(url.startsWith('upi://pay?'));
+  assert.ok(url.includes('pa=shw2100%40ibl'));
+  assert.ok(url.includes('am=14800.00'));
+  assert.ok(url.includes('cu=INR'));
+  assert.ok(url.includes('tn=LX-20261127-1234'));
+
+  assert.equal(buildSafeUpiIntentUrl({ upiId: 'javascript:alert(1)', amount: 100 }), '');
+  assert.equal(buildSafeUpiIntentUrl({ upiId: 'shw2100@ibl', amount: 0 }), '');
+  assert.equal(buildSafeUpiIntentUrl({ upiId: 'shw2100@ibl', amount: -500 }), '');
+});
+

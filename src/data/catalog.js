@@ -1,4 +1,5 @@
 import { withBase } from '../lib/basePath.js';
+import { formatInr } from '../lib/currency.js';
 
 export const PRODUCTS = [
   {
@@ -8,7 +9,7 @@ export const PRODUCTS = [
     subtitle: '41mm Stainless Steel Mechanical Chronograph',
     category: 'Mechanical Skeleton',
     price: 14800,
-    formattedPrice: '$14,800',
+    formattedPrice: formatInr(14800),
     image: withBase('/products/watch-silver-skeleton.png'),
     description:
       'Hand-finished 316L brushed stainless-steel case framing an open-worked calibre with column-wheel chronograph architecture, luminous indices, and integrated link bracelet.',
@@ -25,7 +26,7 @@ export const PRODUCTS = [
     subtitle: '42mm Fluted Bezel Mechanical Chronograph',
     category: 'Chronographs',
     price: 16200,
-    formattedPrice: '$16,200',
+    formattedPrice: formatInr(16200),
     image: withBase('/products/watch-chronograph-macro.png'),
     description:
       'Precision-milled notched tachymeter bezel paired with a multi-layered matte obsidian dial, gunmetal guilloche subdials, and solid H-link steel bracelet.',
@@ -42,7 +43,7 @@ export const PRODUCTS = [
     subtitle: '41mm 18K Yellow Gold Mechanical Chronograph',
     category: 'Precious Metals',
     price: 32500,
-    formattedPrice: '$32,500',
+    formattedPrice: formatInr(32500),
     image: withBase('/products/watch-gold-skeleton.png'),
     description:
       'Sculpted in solid 18K yellow gold with satin-brushed bracelet links and hand-bevelled skeletonized bridges revealing the twin-barrel escapement.',
@@ -58,7 +59,7 @@ export const PRODUCTS = [
     subtitle: '40mm 18K Rose Gold Openworked Edition',
     category: 'Precious Metals',
     price: 29900,
-    formattedPrice: '$29,900',
+    formattedPrice: formatInr(29900),
     image: withBase('/products/watch-rosegold-skeleton.png'),
     description:
       'Warm 18K rose gold alloy housing an architectural skeleton movement with anthracite chronograph counters and articulated fold-over deployment clasp.',
@@ -74,7 +75,7 @@ export const PRODUCTS = [
     subtitle: '41mm Titanium & Obsidian PVD Skeleton',
     category: 'Limited Editions',
     price: 18400,
-    formattedPrice: '$18,400',
+    formattedPrice: formatInr(18400),
     image: withBase('/products/watch-obsidian-skeleton.png'),
     description:
       'Micro-blasted grade-5 titanium finished in deep obsidian PVD, contrasted by exposed rhodium-plated gear trains and Super-LumiNova baton hands.',
@@ -90,7 +91,7 @@ export const PRODUCTS = [
     subtitle: '41mm Crimson Ceramic Bezel Chronograph',
     category: 'Runway Exclusives',
     price: 21600,
-    formattedPrice: '$21,600',
+    formattedPrice: formatInr(21600),
     image: withBase('/products/watch-burgundy-skeleton.png'),
     description:
       'Signature Luxe Store runway exclusive pairing a deep crimson-burgundy ceramic tachymeter bezel with brushed stainless steel and an open-heart skeleton dial.',
@@ -106,7 +107,7 @@ export const PRODUCTS = [
     subtitle: '41mm Steel & 18K Gold Center-Link Chronograph',
     category: 'Precious Metals',
     price: 24900,
-    formattedPrice: '$24,900',
+    formattedPrice: formatInr(24900),
     image: withBase('/products/watch-twotone-skeleton.png'),
     description:
       'Brushed stainless steel paired with solid 18K gold center links, fluted pushers, and tachymeter bezel framing an open-worked skeleton movement.',
@@ -122,7 +123,7 @@ export const PRODUCTS = [
     subtitle: '39mm Exposed Movement Collector Edition',
     category: 'Haute Horlogerie',
     price: 24200,
-    formattedPrice: '$24,200',
+    formattedPrice: formatInr(24200),
     image: withBase('/products/watch-movement-dial.png'),
     description:
       'Focused horological showcase highlighting hand-engraved skeletonized bridges, ruby jewel bearings, and exposed mainspring barrel architecture.',

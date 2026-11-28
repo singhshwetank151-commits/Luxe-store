@@ -427,3 +427,72 @@ export function validateProfileInput(profileData, authenticatedEmail) {
     },
   };
 }
+
+export const ALLOWED_PROOF_MIME_TYPES = Object.freeze([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
+export const MAX_PROOF_FILE_BYTES = 5 * 1024 * 1024;
+
+export function validateUpiPaymentProof({ utrNumber, payerUpiId, customerNote, file }) {
+  const cleanUtr = String(utrNumber || '').replace(/\s+/g, '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{8,24}$/.test(cleanUtr)) {
+    return {
+      ok: false,
+      error: 'Enter a valid 12-digit UTR / UPI reference number (8–24 alphanumeric characters).',
+    };
+  }
+
+  const cleanVpa = String(payerUpiId || '').trim().toLowerCase();
+  if (cleanVpa && !/^[a-z0-9._-]{2,64}@[a-z0-9.-]{2,32}$/.test(cleanVpa)) {
+    return {
+      ok: false,
+      error: 'Enter a valid UPI ID (for example name@okaxis) or leave it blank.',
+    };
+  }
+
+  if (file) {
+    if (!ALLOWED_PROOF_MIME_TYPES.includes(file.type)) {
+      return {
+        ok: false,
+        error: 'Payment proof screenshot must be a JPEG, PNG, or WebP image.',
+      };
+    }
+    if (typeof file.size === 'number' && file.size > MAX_PROOF_FILE_BYTES) {
+      return {
+        ok: false,
+        error: 'Payment proof image must be 5 MB or smaller.',
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    data: {
+      utrNumber: cleanUtr,
+      payerUpiId: cleanVpa || null,
+      customerNote: sanitizePlainText(customerNote || '', 240) || null,
+    },
+  };
+}
+
+export function buildSafeUpiIntentUrl({ upiId, payeeName, amount, orderNumber }) {
+  const cleanPa = String(upiId || '').trim();
+  const cleanPn = sanitizePlainText(payeeName || 'Luxe Store', 60) || 'Luxe Store';
+  const numAmount = Number(amount);
+  const cleanTn = sanitizePlainText(orderNumber || 'Luxe Store Order', 50) || 'Luxe Store Order';
+
+  if (!/^[a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9.-]{2,32}$/.test(cleanPa)) return '';
+  if (!Number.isFinite(numAmount) || numAmount <= 0) return '';
+
+  const params = new URLSearchParams({
+    pa: cleanPa,
+    pn: cleanPn,
+    am: numAmount.toFixed(2),
+    cu: 'INR',
+    tn: cleanTn,
+  });
+  return `upi://pay?${params.toString()}`;
+}
