@@ -134,11 +134,113 @@ export const PRODUCTS = [
   },
 ];
 
+let liveCatalogProducts = [];
+
+export function mapSupabaseProduct(row) {
+  if (!row || !row.id) return null;
+  const price = Number(row.selling_price || 0);
+  const originalPrice =
+    row.original_price !== null && row.original_price !== undefined
+      ? Number(row.original_price)
+      : null;
+  const inventoryEntry = Array.isArray(row.inventory) ? row.inventory[0] : row.inventory;
+  const stockQuantity =
+    inventoryEntry && typeof inventoryEntry.available_quantity === 'number'
+      ? inventoryEntry.available_quantity
+      : null;
+  const stockStatus = inventoryEntry?.stock_status || 'in_stock';
+  const categoryName =
+    row.categories?.name ||
+    (typeof row.category === 'string' && row.category.trim()) ||
+    'Timepieces';
+  const specs = Array.isArray(row.product_specifications)
+    ? [...row.product_specifications]
+        .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+        .map((s) => (s.spec_key && s.spec_value ? `${s.spec_key}: ${s.spec_value}` : s.spec_value || s.spec_key))
+        .filter(Boolean)
+    : [];
+
+  const slug = row.slug || String(row.id);
+  const sku = row.sku || slug.toUpperCase();
+  const isAvailable = stockStatus !== 'out_of_stock' && (stockQuantity === null || stockQuantity > 0);
+
+  return {
+    id: String(row.id),
+    dbId: String(row.id),
+    slug,
+    sku,
+    title: row.name || 'Untitled Timepiece',
+    subtitle: row.brand ? `${row.brand} · ${categoryName}` : categoryName,
+    brand: row.brand || 'Luxe Store',
+    category: categoryName,
+    categoryId: row.category_id || null,
+    price,
+    originalPrice,
+    formattedPrice: formatInr(price),
+    formattedOriginalPrice:
+      originalPrice && originalPrice > price ? formatInr(originalPrice) : null,
+    image: row.main_image_url || withBase('/products/watch-silver-skeleton.png'),
+    description:
+      row.full_description ||
+      row.short_description ||
+      'Precision-crafted mechanical timepiece from the Luxe Store collection.',
+    shortDescription: row.short_description || '',
+    specs:
+      specs.length > 0
+        ? specs
+        : ['Mechanical Movement', 'Sapphire Crystal', 'Authenticity Certificate', 'Insured Delivery'],
+    variants: [
+      {
+        id: sku,
+        label: row.short_description ? row.short_description.slice(0, 48) : 'Standard Edition',
+        available: isAvailable,
+      },
+    ],
+    stockQuantity,
+    stockStatus,
+    status: row.status || 'active',
+    source: 'supabase',
+  };
+}
+
+export function mergeCatalogProducts(liveRows = []) {
+  const mappedLive = (Array.isArray(liveRows) ? liveRows : [])
+    .map(mapSupabaseProduct)
+    .filter(Boolean);
+
+  if (mappedLive.length === 0) {
+    return PRODUCTS;
+  }
+
+  const liveSlugs = new Set(mappedLive.map((p) => p.slug.toLowerCase()));
+  const liveIds = new Set(mappedLive.map((p) => p.id.toLowerCase()));
+  const fallbackStatic = PRODUCTS.filter(
+    (p) => !liveSlugs.has(p.slug.toLowerCase()) && !liveIds.has(p.id.toLowerCase())
+  );
+
+  return [...mappedLive, ...fallbackStatic];
+}
+
+export function setLiveCatalogProducts(liveRows = []) {
+  liveCatalogProducts = mergeCatalogProducts(liveRows);
+  return liveCatalogProducts;
+}
+
+export function getCatalogProducts() {
+  return liveCatalogProducts.length > 0 ? liveCatalogProducts : PRODUCTS;
+}
+
 export function getProductById(productId) {
-  return PRODUCTS.find((p) => p.id === productId || p.slug === productId) || null;
+  const catalog = getCatalogProducts();
+  return (
+    catalog.find((p) => p.id === productId || p.slug === productId || p.sku === productId) ||
+    PRODUCTS.find((p) => p.id === productId || p.slug === productId) ||
+    null
+  );
 }
 
 export function getDefaultVariant(product) {
   if (!product || !Array.isArray(product.variants)) return null;
   return product.variants.find((v) => v.available !== false) || product.variants[0] || null;
 }
+

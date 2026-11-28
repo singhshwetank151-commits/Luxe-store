@@ -1,40 +1,49 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
+  ArrowRight,
+  Check,
   CheckCircle2,
   ClipboardList,
+  Copy,
+  Download,
   ExternalLink,
+  Eye,
   LogOut,
   Package,
+  Plus,
   RefreshCw,
+  Search,
+  Settings,
   ShieldAlert,
   ShieldCheck,
   Users,
+  X,
   XCircle,
 } from 'lucide-react';
-import { useAuth, useRouter } from '../context/storeHooks';
+import { useAuth, useCatalog, useRouter } from '../context/storeHooks';
+import { formatInr } from '../lib/currency';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import {
   ALLOWED_ORDER_STATUSES,
-  validateInventoryAdjustment,
+  buildOrdersCsv,
   validateOrderLifecycleUpdate,
   withNetworkGuard,
 } from '../lib/security';
+import { AdminCatalogManager } from './admin/AdminCatalogManager';
+import { AdminStoreSettings } from './admin/AdminStoreSettings';
 import './AdminPanel.css';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: Activity },
   { id: 'orders', label: 'Orders', icon: ClipboardList },
   { id: 'verifications', label: 'UPI Proofs', icon: ShieldCheck },
-  { id: 'inventory', label: 'Inventory', icon: Package },
+  { id: 'catalog', label: 'Products & Stock', icon: Package },
+  { id: 'settings', label: 'Store & UPI', icon: Settings },
   { id: 'audit', label: 'Clients & Audit', icon: Users },
 ];
-
-function formatInr(value) {
-  const num = Number(value || 0);
-  return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-}
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -53,6 +62,30 @@ function extractProofObjectPath(rawUrl) {
   return after || null;
 }
 
+function formatShippingLabel(order) {
+  const customer = order.customer_snapshot || {};
+  const addr = order.delivery_address_snapshot || {};
+  const streetLine = [addr.house_building, addr.street].filter(Boolean).join(', ');
+  const cityLine = [addr.city, addr.state, addr.pin_code || addr.postal_code]
+    .filter(Boolean)
+    .join(', ');
+  const itemsLines = (order.order_items || []).map(
+    (li) => `- ${li.product_name_snapshot || li.sku_snapshot} x${li.quantity}`
+  );
+  return [
+    `Order: ${order.order_number} (${formatInr(order.final_amount)})`,
+    `Recipient: ${customer.full_name || 'Client'}`,
+    customer.phone ? `Phone: ${customer.phone}` : null,
+    customer.email ? `Email: ${customer.email}` : null,
+    streetLine ? `Address: ${streetLine}` : null,
+    cityLine ? `City/PIN: ${cityLine}` : null,
+    addr.notes ? `Note: ${addr.notes}` : null,
+    itemsLines.length > 0 ? `Items:\n${itemsLines.join('\n')}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 function OrderLifecycleEditor({ order, onUpdated, setFeedback }) {
   const [status, setStatus] = useState(order.delivery_status || 'pending_payment');
   const [trackingNumber, setTrackingNumber] = useState(order.tracking_number || '');
@@ -63,15 +96,14 @@ function OrderLifecycleEditor({ order, onUpdated, setFeedback }) {
 
   const isTerminal = order.delivery_status === 'cancelled' || order.delivery_status === 'refunded';
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!supabase) return;
+  const applyStatusUpdate = async (targetStatus, customNote) => {
+    if (!supabase || saving || isTerminal) return;
     const validated = validateOrderLifecycleUpdate({
-      status,
+      status: targetStatus,
       trackingNumber,
       courierPartner,
       trackingUrl,
-      note,
+      note: customNote ?? note,
     });
     if (!validated.ok) {
       setFeedback({ type: 'error', text: validated.error });
@@ -94,7 +126,11 @@ function OrderLifecycleEditor({ order, onUpdated, setFeedback }) {
         setFeedback({ type: 'error', text: error.message });
         return;
       }
-      setFeedback({ type: 'success', text: `Order ${order.order_number} updated to ${validated.status}.` });
+      setStatus(validated.status);
+      setFeedback({
+        type: 'success',
+        text: `Order ${order.order_number} updated to ${validated.status}.`,
+      });
       setNote('');
       onUpdated();
     } catch (err) {
@@ -104,8 +140,37 @@ function OrderLifecycleEditor({ order, onUpdated, setFeedback }) {
     }
   };
 
+  const handleSave = (e) => {
+    e.preventDefault();
+    applyStatusUpdate(status);
+  };
+
   return (
     <form className="adm-inline-form" onSubmit={handleSave}>
+      {!isTerminal && (
+        <div className="adm-quick-status-row">
+          <span className="adm-quick-label">Quick transition:</span>
+          {[
+            { st: 'confirmed', label: 'Confirm' },
+            { st: 'processing', label: 'Packing' },
+            { st: 'shipped', label: 'Mark shipped' },
+            { st: 'delivered', label: 'Mark delivered' },
+          ]
+            .filter((item) => item.st !== order.delivery_status)
+            .map((item) => (
+              <button
+                key={item.st}
+                type="button"
+                className="adm-filter-pill"
+                disabled={saving}
+                onClick={() => applyStatusUpdate(item.st, `Quick update to ${item.st}`)}
+              >
+                {item.label}
+              </button>
+            ))}
+        </div>
+      )}
+
       <div className="adm-inline-grid">
         <label className="adm-field">
           <span>Delivery status</span>
@@ -167,133 +232,6 @@ function OrderLifecycleEditor({ order, onUpdated, setFeedback }) {
   );
 }
 
-function InventoryAdjustRow({ row, onUpdated, setFeedback }) {
-  const [qty, setQty] = useState(String(row.available_quantity ?? 0));
-  const [threshold, setThreshold] = useState(String(row.low_stock_threshold ?? 5));
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const handleAdjust = async (e) => {
-    e.preventDefault();
-    if (!supabase) return;
-    const validated = validateInventoryAdjustment({
-      quantity: qty,
-      threshold,
-      notes,
-    });
-    if (!validated.ok) {
-      setFeedback({ type: 'error', text: validated.error });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const { error } = await withNetworkGuard(
-        supabase.rpc('admin_adjust_inventory', {
-          p_product_id: row.product_id,
-          p_new_quantity: validated.quantity,
-          p_low_stock_threshold: validated.threshold,
-          p_notes: validated.notes,
-        }),
-        15000
-      );
-
-      if (error) {
-        setFeedback({ type: 'error', text: error.message });
-        return;
-      }
-
-      setNotes('');
-      setFeedback({
-        type: 'success',
-        text: `Stock for ${row.products?.name || row.sku} updated to ${validated.quantity}.`,
-      });
-      onUpdated();
-    } catch (err) {
-      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Stock adjustment failed.' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleToggleProductStatus = async () => {
-    if (!supabase || !row.products) return;
-    const nextStatus = row.products.status === 'active' ? 'inactive' : 'active';
-    try {
-      const { error } = await withNetworkGuard(
-        supabase.from('products').update({ status: nextStatus }).eq('id', row.product_id),
-        15000
-      );
-      if (error) {
-        setFeedback({ type: 'error', text: error.message });
-        return;
-      }
-      setFeedback({
-        type: 'success',
-        text: `${row.products.name} marked ${nextStatus}.`,
-      });
-      onUpdated();
-    } catch (err) {
-      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Unable to update product.' });
-    }
-  };
-
-  return (
-    <div className="adm-list-card">
-      <div className="adm-list-card-top">
-        <div>
-          <div className="adm-row-title">{row.products?.name || 'Untitled Watch'}</div>
-          <div className="adm-row-meta">
-            SKU {row.sku} · {formatInr(row.products?.selling_price)} ·{' '}
-            <span className={`adm-pill adm-pill-${row.stock_status}`}>{row.stock_status}</span> ·{' '}
-            <span className={`adm-pill adm-pill-${row.products?.status}`}>
-              {row.products?.status || 'active'}
-            </span>
-          </div>
-        </div>
-        <button type="button" className="adm-secondary-btn" onClick={handleToggleProductStatus}>
-          {row.products?.status === 'active' ? 'Set inactive' : 'Set active'}
-        </button>
-      </div>
-
-      <form className="adm-stock-form" onSubmit={handleAdjust}>
-        <label className="adm-field">
-          <span>Available qty</span>
-          <input
-            type="number"
-            min={0}
-            max={100000}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-          />
-        </label>
-        <label className="adm-field">
-          <span>Low threshold</span>
-          <input
-            type="number"
-            min={0}
-            max={10000}
-            value={threshold}
-            onChange={(e) => setThreshold(e.target.value)}
-          />
-        </label>
-        <label className="adm-field adm-stock-notes">
-          <span>Adjustment note</span>
-          <input
-            type="text"
-            placeholder="Restock or physical count"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </label>
-        <button type="submit" className="adm-primary-btn" disabled={saving}>
-          {saving ? 'Saving...' : 'Save stock'}
-        </button>
-      </form>
-    </div>
-  );
-}
-
 export function AdminPanel() {
   const {
     user,
@@ -304,6 +242,7 @@ export function AdminPanel() {
     signInWithGoogle,
     signOut,
   } = useAuth();
+  const { refreshCatalog } = useCatalog();
   const { navigate } = useRouter();
 
   // Admin Login Form State
@@ -312,18 +251,28 @@ export function AdminPanel() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Dashboard State
+  // Dashboard UI State
   const [activeTab, setActiveTab] = useState('overview');
   const [salesPeriod, setSalesPeriod] = useState('daily');
   const [orderFilter, setOrderFilter] = useState('all');
   const [orderSearch, setOrderSearch] = useState('');
   const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [verifFilter, setVerifFilter] = useState('all');
+  const [verifSearch, setVerifSearch] = useState('');
   const [verifRemarks, setVerifRemarks] = useState({});
+  const [clientSearch, setClientSearch] = useState('');
+  const [catalogFilterJump, setCatalogFilterJump] = useState('all');
+  const [autoOpenCreateProduct, setAutoOpenCreateProduct] = useState(false);
+  const [copiedKey, setCopiedKey] = useState('');
+  const [proofLightbox, setProofLightbox] = useState(null); // { url, title, subtitle }
 
+  // Server Data State
   const [analytics, setAnalytics] = useState(null);
   const [orders, setOrders] = useState([]);
   const [verifications, setVerifications] = useState([]);
-  const [inventoryRows, setInventoryRows] = useState([]);
+  const [adminProducts, setAdminProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [storeSettings, setStoreSettings] = useState(null);
   const [clients, setClients] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
@@ -335,6 +284,21 @@ export function AdminPanel() {
   const triggerRefresh = useCallback(() => {
     setRefreshTick((t) => t + 1);
   }, []);
+
+  const handleCatalogMutated = useCallback(() => {
+    triggerRefresh();
+    refreshCatalog();
+  }, [triggerRefresh, refreshCatalog]);
+
+  // Close proof screenshot lightbox on Escape
+  useEffect(() => {
+    if (!proofLightbox) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setProofLightbox(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [proofLightbox]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !isAuthenticated || !isAdmin) {
@@ -350,7 +314,9 @@ export function AdminPanel() {
           analyticsRes,
           ordersRes,
           verifRes,
-          invRes,
+          productsRes,
+          categoriesRes,
+          settingsRes,
           profilesRes,
           rolesRes,
           auditRes,
@@ -363,31 +329,41 @@ export function AdminPanel() {
                 'id, order_number, user_id, customer_snapshot, delivery_address_snapshot, final_amount, currency, payment_method, payment_status, delivery_status, payment_reference, tracking_number, courier_partner, tracking_url, created_at, order_items(id, product_name_snapshot, sku_snapshot, quantity, total_price)'
               )
               .order('created_at', { ascending: false })
-              .limit(40),
+              .limit(60),
             supabase
               .from('payment_verifications')
               .select(
                 'id, order_id, utr_number, payer_upi_id, proof_image_url, customer_note, verification_status, admin_remarks, submitted_at, verified_at, orders(order_number, final_amount)'
               )
               .order('submitted_at', { ascending: false })
-              .limit(40),
+              .limit(60),
             supabase
-              .from('inventory')
+              .from('products')
               .select(
-                'id, product_id, sku, available_quantity, low_stock_threshold, stock_status, products(id, name, selling_price, status, total_sold)'
+                'id, name, slug, sku, category_id, brand, short_description, full_description, selling_price, original_price, main_image_url, status, total_sold, created_at, categories(id, name, slug), inventory(id, available_quantity, low_stock_threshold, stock_status)'
               )
-              .order('available_quantity', { ascending: true }),
+              .order('created_at', { ascending: false })
+              .limit(80),
+            supabase
+              .from('categories')
+              .select('id, name, slug, is_active')
+              .order('name', { ascending: true }),
+            supabase
+              .from('store_settings')
+              .select('id, store_name, upi_id, upi_display_name, upi_qr_image_url, upi_payment_instructions')
+              .limit(1)
+              .maybeSingle(),
             supabase
               .from('profiles')
               .select('id, full_name, email, phone, is_restricted, restriction_reason, created_at')
               .order('created_at', { ascending: false })
-              .limit(50),
+              .limit(80),
             supabase.from('user_roles').select('user_id, role'),
             supabase
               .from('admin_audit_logs')
               .select('id, admin_user_id, action, entity_type, entity_id, created_at')
               .order('created_at', { ascending: false })
-              .limit(25),
+              .limit(30),
           ]),
           15000
         );
@@ -398,7 +374,7 @@ export function AdminPanel() {
           analyticsRes.error ||
           ordersRes.error ||
           verifRes.error ||
-          invRes.error ||
+          productsRes.error ||
           profilesRes.error ||
           rolesRes.error ||
           auditRes.error;
@@ -409,7 +385,9 @@ export function AdminPanel() {
         if (analyticsRes.data) setAnalytics(analyticsRes.data);
         if (ordersRes.data) setOrders(ordersRes.data);
         if (verifRes.data) setVerifications(verifRes.data);
-        if (invRes.data) setInventoryRows(invRes.data);
+        if (productsRes.data) setAdminProducts(productsRes.data);
+        if (categoriesRes.data) setCategories(categoriesRes.data);
+        if (settingsRes.data) setStoreSettings(settingsRes.data);
 
         if (profilesRes.data) {
           const roleMap = new Map();
@@ -445,19 +423,77 @@ export function AdminPanel() {
     };
   }, [isAuthenticated, isAdmin, refreshTick]);
 
+  // Actionable counts for Overview attention cards & badges
+  const pendingVerificationsCount = useMemo(
+    () => verifications.filter((v) => v.verification_status === 'pending').length,
+    [verifications]
+  );
+
+  const ordersToShipCount = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          o.payment_status === 'confirmed' &&
+          (o.delivery_status === 'confirmed' || o.delivery_status === 'processing')
+      ).length,
+    [orders]
+  );
+
+  const lowStockCount = useMemo(
+    () =>
+      adminProducts.filter((p) => {
+        const inv = Array.isArray(p.inventory) ? p.inventory[0] : p.inventory;
+        const qty = Number(inv?.available_quantity ?? 0);
+        const thresh = Number(inv?.low_stock_threshold ?? 3);
+        return (
+          inv?.stock_status === 'low_stock' ||
+          inv?.stock_status === 'out_of_stock' ||
+          qty <= thresh
+        );
+      }).length,
+    [adminProducts]
+  );
+
   const filteredOrders = useMemo(() => {
     const q = orderSearch.trim().toLowerCase();
     return orders.filter((order) => {
-      if (orderFilter !== 'all' && order.delivery_status !== orderFilter && order.payment_status !== orderFilter) {
+      if (
+        orderFilter !== 'all' &&
+        order.delivery_status !== orderFilter &&
+        order.payment_status !== orderFilter
+      ) {
         return false;
       }
       if (!q) return true;
       const hay = `${order.order_number} ${order.customer_snapshot?.full_name || ''} ${
-        order.customer_snapshot?.phone || ''
-      } ${order.payment_reference || ''}`.toLowerCase();
+        order.customer_snapshot?.email || ''
+      } ${order.customer_snapshot?.phone || ''} ${order.payment_reference || ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [orders, orderFilter, orderSearch]);
+
+  const filteredVerifications = useMemo(() => {
+    const q = verifSearch.trim().toLowerCase();
+    return verifications.filter((verif) => {
+      if (verifFilter !== 'all' && verif.verification_status !== verifFilter) {
+        return false;
+      }
+      if (!q) return true;
+      const hay = `${verif.orders?.order_number || ''} ${verif.utr_number || ''} ${
+        verif.payer_upi_id || ''
+      } ${verif.customer_note || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [verifications, verifFilter, verifSearch]);
+
+  const filteredClients = useMemo(() => {
+    const q = clientSearch.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter((c) => {
+      const hay = `${c.full_name || ''} ${c.email || ''} ${c.phone || ''} ${c.roles.join(' ')}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [clients, clientSearch]);
 
   const salesSeries = useMemo(() => {
     if (!analytics) return [];
@@ -470,6 +506,36 @@ export function AdminPanel() {
     const vals = salesSeries.map((pt) => Number(pt.revenue || 0));
     return Math.max(1, ...vals);
   }, [salesSeries]);
+
+  const handleCopyText = async (key, text) => {
+    try {
+      await navigator.clipboard.writeText(String(text));
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey(''), 1800);
+    } catch {
+      setFeedback({ type: 'error', text: 'Clipboard permission denied by browser.' });
+    }
+  };
+
+  const handleExportOrdersCsv = () => {
+    const list = activeTab === 'orders' ? filteredOrders : orders;
+    if (list.length === 0) {
+      setFeedback({ type: 'error', text: 'No orders available to export.' });
+      return;
+    }
+    const csv = buildOrdersCsv(list);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `luxe-store-orders-${dateStamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setFeedback({ type: 'success', text: `Exported ${list.length} orders to CSV.` });
+  };
 
   const handleAdminPasswordSubmit = async (e) => {
     e.preventDefault();
@@ -520,21 +586,37 @@ export function AdminPanel() {
     }
   };
 
-  const handleOpenSignedProof = async (proofUrl) => {
+  const handlePreviewSignedProof = async (verif) => {
     if (!supabase) return;
-    const objectPath = extractProofObjectPath(proofUrl);
+    const objectPath = extractProofObjectPath(verif.proof_image_url);
     if (!objectPath) {
       setFeedback({ type: 'error', text: 'Unsupported storage path for payment proof.' });
       return;
     }
-    const { data, error } = await supabase.storage
-      .from('payment-proofs')
-      .createSignedUrl(objectPath, 120);
-    if (error || !data?.signedUrl) {
-      setFeedback({ type: 'error', text: error?.message || 'Could not generate signed proof URL.' });
-      return;
+    const key = `proof:${verif.id}`;
+    setBusyActionKey(key);
+    try {
+      const { data, error } = await withNetworkGuard(
+        supabase.storage.from('payment-proofs').createSignedUrl(objectPath, 180),
+        12000
+      );
+      if (error || !data?.signedUrl) {
+        setFeedback({ type: 'error', text: error?.message || 'Could not generate signed proof URL.' });
+        return;
+      }
+      setProofLightbox({
+        url: data.signedUrl,
+        title: `${verif.orders?.order_number || 'Order'} · UTR ${verif.utr_number}`,
+        subtitle: `Amount ${formatInr(verif.orders?.final_amount)} · UPI ${verif.payer_upi_id || '—'}`,
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Unable to load payment proof.',
+      });
+    } finally {
+      setBusyActionKey('');
     }
-    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleToggleUserRestriction = async (client) => {
@@ -711,7 +793,7 @@ export function AdminPanel() {
               <span>Storefront</span>
             </button>
             <div className="adm-header-badges">
-              <span className="adm-eyebrow">Luxe Store Concierge Ops</span>
+              <span className="adm-eyebrow">Luxe Store Operations</span>
               <span className="adm-role-badge">{user.role}</span>
             </div>
             <h1 className="adm-title">Admin console</h1>
@@ -764,20 +846,27 @@ export function AdminPanel() {
         <nav className="adm-tabs" aria-label="Admin sections">
           {TABS.map((tab) => {
             const Icon = tab.icon;
-            const pendingVerifs =
+            const badgeCount =
               tab.id === 'verifications'
-                ? verifications.filter((v) => v.verification_status === 'pending').length
+                ? pendingVerificationsCount
+                : tab.id === 'orders'
+                ? ordersToShipCount
+                : tab.id === 'catalog'
+                ? lowStockCount
                 : 0;
             return (
               <button
                 key={tab.id}
                 type="button"
                 className={`adm-tab-btn ${activeTab === tab.id ? 'is-active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setAutoOpenCreateProduct(false);
+                  setActiveTab(tab.id);
+                }}
               >
                 <Icon size={16} strokeWidth={1.5} />
                 <span>{tab.label}</span>
-                {pendingVerifs > 0 && <span className="adm-tab-count">{pendingVerifs}</span>}
+                {badgeCount > 0 && <span className="adm-tab-count">{badgeCount}</span>}
               </button>
             );
           })}
@@ -786,6 +875,98 @@ export function AdminPanel() {
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <section className="adm-section" aria-label="Analytics Overview">
+            {/* Actionable Attention Queue */}
+            {(pendingVerificationsCount > 0 || ordersToShipCount > 0 || lowStockCount > 0) && (
+              <div className="adm-attention-grid">
+                {pendingVerificationsCount > 0 && (
+                  <button
+                    type="button"
+                    className="adm-attention-card is-warn"
+                    onClick={() => {
+                      setVerifFilter('pending');
+                      setActiveTab('verifications');
+                    }}
+                  >
+                    <ShieldCheck size={18} strokeWidth={1.5} />
+                    <div>
+                      <strong>{pendingVerificationsCount} UPI proof{pendingVerificationsCount === 1 ? '' : 's'} pending</strong>
+                      <span>Review UTR & approve settlement</span>
+                    </div>
+                    <ArrowRight size={16} strokeWidth={1.5} />
+                  </button>
+                )}
+
+                {ordersToShipCount > 0 && (
+                  <button
+                    type="button"
+                    className="adm-attention-card"
+                    onClick={() => {
+                      setOrderFilter('confirmed');
+                      setActiveTab('orders');
+                    }}
+                  >
+                    <ClipboardList size={18} strokeWidth={1.5} />
+                    <div>
+                      <strong>{ordersToShipCount} paid order{ordersToShipCount === 1 ? '' : 's'} ready to ship</strong>
+                      <span>Add courier AWB & mark shipped</span>
+                    </div>
+                    <ArrowRight size={16} strokeWidth={1.5} />
+                  </button>
+                )}
+
+                {lowStockCount > 0 && (
+                  <button
+                    type="button"
+                    className="adm-attention-card is-danger"
+                    onClick={() => {
+                      setAutoOpenCreateProduct(false);
+                      setCatalogFilterJump('low_stock');
+                      setActiveTab('catalog');
+                    }}
+                  >
+                    <AlertTriangle size={18} strokeWidth={1.5} />
+                    <div>
+                      <strong>{lowStockCount} watch{lowStockCount === 1 ? '' : 'es'} low or out of stock</strong>
+                      <span>Restock inventory quantities</span>
+                    </div>
+                    <ArrowRight size={16} strokeWidth={1.5} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Quick Action Bar */}
+            <div className="adm-quick-bar">
+              <button
+                type="button"
+                className="adm-primary-btn"
+                onClick={() => {
+                  setCatalogFilterJump('all');
+                  setAutoOpenCreateProduct(true);
+                  setActiveTab('catalog');
+                }}
+              >
+                <Plus size={16} strokeWidth={1.5} />
+                <span>Add timepiece</span>
+              </button>
+              <button
+                type="button"
+                className="adm-secondary-btn"
+                onClick={() => setActiveTab('settings')}
+              >
+                <Settings size={16} strokeWidth={1.5} />
+                <span>Edit UPI & store settings</span>
+              </button>
+              <button
+                type="button"
+                className="adm-secondary-btn"
+                onClick={handleExportOrdersCsv}
+              >
+                <Download size={16} strokeWidth={1.5} />
+                <span>Export orders CSV</span>
+              </button>
+            </div>
+
             <div className="adm-kpi-grid">
               <article className="adm-kpi-card">
                 <span>Confirmed revenue</span>
@@ -800,14 +981,14 @@ export function AdminPanel() {
                 </small>
               </article>
               <article className="adm-kpi-card">
-                <span>Active products</span>
-                <strong>{analytics?.total_products ?? inventoryRows.length}</strong>
-                <small>Low/out of stock: {analytics?.low_stock_count ?? 0}</small>
+                <span>Catalog watches</span>
+                <strong>{analytics?.total_products ?? adminProducts.length}</strong>
+                <small>Low/out of stock: {lowStockCount}</small>
               </article>
               <article className="adm-kpi-card">
                 <span>Registered clients</span>
                 <strong>{analytics?.total_customers ?? clients.length}</strong>
-                <small>Active fulfillment queue: {analytics?.confirmed_orders ?? 0}</small>
+                <small>Ready to dispatch: {ordersToShipCount}</small>
               </article>
             </div>
 
@@ -874,13 +1055,16 @@ export function AdminPanel() {
         {activeTab === 'orders' && (
           <section className="adm-section" aria-label="Orders Management">
             <div className="adm-toolbar">
-              <input
-                type="search"
-                className="adm-search"
-                placeholder="Search order #, client name, phone, or UTR..."
-                value={orderSearch}
-                onChange={(e) => setOrderSearch(e.target.value)}
-              />
+              <div className="adm-search-wrap">
+                <Search size={15} strokeWidth={1.5} />
+                <input
+                  type="search"
+                  className="adm-search"
+                  placeholder="Search order #, client name, email, phone, or UTR..."
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                />
+              </div>
               <select
                 className="adm-select"
                 value={orderFilter}
@@ -893,6 +1077,14 @@ export function AdminPanel() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                className="adm-secondary-btn"
+                onClick={handleExportOrdersCsv}
+              >
+                <Download size={15} strokeWidth={1.5} />
+                <span>Export CSV ({filteredOrders.length})</span>
+              </button>
             </div>
 
             <div className="adm-stack">
@@ -900,6 +1092,8 @@ export function AdminPanel() {
                 const isExpanded = expandedOrderId === order.id;
                 const customer = order.customer_snapshot || {};
                 const addr = order.delivery_address_snapshot || {};
+                const pin = addr.pin_code || addr.postal_code || '';
+                const labelKey = `label:${order.id}`;
                 return (
                   <article key={order.id} className="adm-list-card">
                     <div className="adm-list-card-top">
@@ -908,7 +1102,8 @@ export function AdminPanel() {
                           {order.order_number} · {formatInr(order.final_amount)}
                         </div>
                         <div className="adm-row-meta">
-                          {customer.full_name || 'Client'} · {customer.phone || '—'} ·{' '}
+                          {customer.full_name || 'Client'}
+                          {customer.email ? ` · ${customer.email}` : ''} · {customer.phone || '—'} ·{' '}
                           {order.payment_method} · {formatDate(order.created_at)}
                         </div>
                         <div className="adm-pill-row">
@@ -921,16 +1116,38 @@ export function AdminPanel() {
                           {order.payment_reference && (
                             <span className="adm-pill">ref: {order.payment_reference}</span>
                           )}
+                          {order.tracking_number && (
+                            <span className="adm-pill">AWB: {order.tracking_number}</span>
+                          )}
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        className="adm-secondary-btn"
-                        onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
-                      >
-                        {isExpanded ? 'Close' : 'Manage order'}
-                      </button>
+                      <div className="adm-card-actions">
+                        <button
+                          type="button"
+                          className="adm-secondary-btn"
+                          onClick={() => handleCopyText(labelKey, formatShippingLabel(order))}
+                        >
+                          {copiedKey === labelKey ? (
+                            <>
+                              <Check size={14} strokeWidth={1.5} />
+                              <span>Copied label</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={14} strokeWidth={1.5} />
+                              <span>Copy label</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="adm-secondary-btn"
+                          onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                        >
+                          {isExpanded ? 'Close' : 'Manage order'}
+                        </button>
+                      </div>
                     </div>
 
                     {isExpanded && (
@@ -940,9 +1157,11 @@ export function AdminPanel() {
                             <small>Delivery address</small>
                             <p>
                               {addr.house_building ? `${addr.house_building}, ` : ''}
-                              {addr.street || '—'}, {addr.city || ''} {addr.state || ''}{' '}
-                              {addr.pin_code || ''}
+                              {addr.street || '—'}, {addr.city || ''} {addr.state || ''} {pin}
                             </p>
+                            {addr.notes && (
+                              <p className="adm-note-copy">Delivery note: {addr.notes}</p>
+                            )}
                           </div>
                           <div>
                             <small>Line items</small>
@@ -977,9 +1196,42 @@ export function AdminPanel() {
         {/* TAB 3: UPI VERIFICATIONS */}
         {activeTab === 'verifications' && (
           <section className="adm-section" aria-label="UPI Payment Verifications">
+            <div className="adm-toolbar">
+              <div className="adm-search-wrap">
+                <Search size={15} strokeWidth={1.5} />
+                <input
+                  type="search"
+                  className="adm-search"
+                  placeholder="Search UTR, order number, or payer UPI ID..."
+                  value={verifSearch}
+                  onChange={(e) => setVerifSearch(e.target.value)}
+                />
+              </div>
+              <div className="adm-filter-pills" role="tablist" aria-label="Verification status filters">
+                {[
+                  { id: 'all', label: `All (${verifications.length})` },
+                  { id: 'pending', label: `Pending (${pendingVerificationsCount})` },
+                  { id: 'approved', label: 'Approved' },
+                  { id: 'rejected', label: 'Rejected' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={verifFilter === item.id}
+                    className={`adm-filter-pill ${verifFilter === item.id ? 'is-active' : ''}`}
+                    onClick={() => setVerifFilter(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="adm-stack">
-              {verifications.map((verif) => {
+              {filteredVerifications.map((verif) => {
                 const isPending = verif.verification_status === 'pending';
+                const utrCopyKey = `utr:${verif.id}`;
                 return (
                   <article key={verif.id} className="adm-list-card">
                     <div className="adm-list-card-top">
@@ -1000,14 +1252,34 @@ export function AdminPanel() {
                         <span className={`adm-pill adm-pill-${verif.verification_status}`}>
                           {verif.verification_status}
                         </span>
+                        <button
+                          type="button"
+                          className="adm-secondary-btn"
+                          onClick={() => handleCopyText(utrCopyKey, verif.utr_number)}
+                        >
+                          {copiedKey === utrCopyKey ? (
+                            <>
+                              <Check size={14} strokeWidth={1.5} />
+                              <span>Copied UTR</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={14} strokeWidth={1.5} />
+                              <span>Copy UTR</span>
+                            </>
+                          )}
+                        </button>
                         {verif.proof_image_url && (
                           <button
                             type="button"
                             className="adm-secondary-btn"
-                            onClick={() => handleOpenSignedProof(verif.proof_image_url)}
+                            disabled={busyActionKey === `proof:${verif.id}`}
+                            onClick={() => handlePreviewSignedProof(verif)}
                           >
-                            <ExternalLink size={14} />
-                            <span>View proof</span>
+                            <Eye size={14} strokeWidth={1.5} />
+                            <span>
+                              {busyActionKey === `proof:${verif.id}` ? 'Loading...' : 'Preview proof'}
+                            </span>
                           </button>
                         )}
                       </div>
@@ -1053,47 +1325,64 @@ export function AdminPanel() {
                 );
               })}
 
-              {verifications.length === 0 && (
-                <p className="adm-empty">No UPI payment proofs have been submitted.</p>
+              {filteredVerifications.length === 0 && (
+                <p className="adm-empty">No UPI payment proofs match this filter.</p>
               )}
             </div>
           </section>
         )}
 
-        {/* TAB 4: INVENTORY */}
-        {activeTab === 'inventory' && (
-          <section className="adm-section" aria-label="Inventory and Products">
-            <div className="adm-stack">
-              {inventoryRows.map((row) => (
-                <InventoryAdjustRow
-                  key={`${row.id}-${row.available_quantity}-${row.products?.status}`}
-                  row={row}
-                  onUpdated={triggerRefresh}
-                  setFeedback={setFeedback}
-                />
-              ))}
-              {inventoryRows.length === 0 && (
-                <p className="adm-empty">No inventory records available.</p>
-              )}
-            </div>
-          </section>
+        {/* TAB 4: PRODUCTS & STOCK */}
+        {activeTab === 'catalog' && (
+          <AdminCatalogManager
+            key={`catalog-${catalogFilterJump}-${autoOpenCreateProduct ? 'new' : 'list'}`}
+            products={adminProducts}
+            categories={categories}
+            initialFilter={catalogFilterJump}
+            autoOpenCreate={autoOpenCreateProduct}
+            onUpdated={handleCatalogMutated}
+            setFeedback={setFeedback}
+          />
         )}
 
-        {/* TAB 5: CLIENTS & AUDIT LOGS */}
+        {/* TAB 5: STORE & UPI SETTINGS */}
+        {activeTab === 'settings' && (
+          <AdminStoreSettings
+            key={storeSettings?.id || 'default-settings'}
+            settings={storeSettings}
+            onUpdated={triggerRefresh}
+            setFeedback={setFeedback}
+          />
+        )}
+
+        {/* TAB 6: CLIENTS & AUDIT LOGS */}
         {activeTab === 'audit' && (
           <section className="adm-section" aria-label="Clients and Audit Logs">
             <div className="adm-split-grid">
               <div className="adm-panel">
                 <div className="adm-panel-head">
-                  <h2>Clients & roles ({clients.length})</h2>
+                  <h2>Clients & roles ({filteredClients.length})</h2>
+                </div>
+                <div className="adm-toolbar">
+                  <div className="adm-search-wrap">
+                    <Search size={15} strokeWidth={1.5} />
+                    <input
+                      type="search"
+                      className="adm-search"
+                      placeholder="Filter by name, email, or phone..."
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <div className="adm-compact-list">
-                  {clients.map((client) => (
+                  {filteredClients.map((client) => (
                     <div key={client.id} className="adm-compact-row">
                       <div>
                         <strong>{client.full_name || 'Unnamed client'}</strong>
                         <small>
-                          {client.email || 'No email'} · {client.roles.join(', ')}
+                          {client.email || 'No email'}
+                          {client.phone ? ` · ${client.phone}` : ''} · {client.roles.join(', ')}
                           {client.is_restricted ? ' · RESTRICTED' : ''}
                         </small>
                       </div>
@@ -1107,6 +1396,9 @@ export function AdminPanel() {
                       </button>
                     </div>
                   ))}
+                  {filteredClients.length === 0 && (
+                    <p className="adm-empty">No matching clients found.</p>
+                  )}
                 </div>
               </div>
 
@@ -1133,6 +1425,48 @@ export function AdminPanel() {
           </section>
         )}
       </div>
+
+      {/* Inline UPI Payment Proof Screenshot Lightbox */}
+      {proofLightbox && (
+        <div
+          className="adm-lightbox-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="UPI Payment Screenshot Preview"
+          onClick={() => setProofLightbox(null)}
+        >
+          <div className="adm-lightbox-card" onClick={(e) => e.stopPropagation()}>
+            <div className="adm-lightbox-head">
+              <div>
+                <strong>{proofLightbox.title}</strong>
+                <small>{proofLightbox.subtitle}</small>
+              </div>
+              <div className="adm-card-actions">
+                <a
+                  href={proofLightbox.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="adm-secondary-btn"
+                >
+                  <ExternalLink size={14} strokeWidth={1.5} />
+                  <span>Open full image</span>
+                </a>
+                <button
+                  type="button"
+                  className="adm-secondary-btn"
+                  aria-label="Close preview"
+                  onClick={() => setProofLightbox(null)}
+                >
+                  <X size={16} strokeWidth={1.5} />
+                </button>
+              </div>
+            </div>
+            <div className="adm-lightbox-body">
+              <img src={proofLightbox.url} alt={proofLightbox.title} />
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

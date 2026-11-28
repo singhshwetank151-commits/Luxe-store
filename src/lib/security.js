@@ -496,3 +496,207 @@ export function buildSafeUpiIntentUrl({ upiId, payeeName, amount, orderNumber })
   });
   return `upi://pay?${params.toString()}`;
 }
+
+export function isSafeAssetImageUrl(rawUrl) {
+  const clean = String(rawUrl || '').trim();
+  if (!clean) return true;
+  if (clean.startsWith('/') && !clean.startsWith('//')) return !containsControlChar(clean);
+  return /^https:\/\/[^\s<>]+$/i.test(clean);
+}
+
+export function slugifyProductName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+export function validateProductInput({
+  name,
+  brand,
+  sku,
+  sellingPrice,
+  originalPrice,
+  stockQuantity,
+  lowStockThreshold,
+  shortDescription,
+  fullDescription,
+  mainImageUrl,
+  status,
+  specsText,
+}) {
+  const cleanName = sanitizePlainText(name, 120);
+  const cleanBrand = sanitizePlainText(brand || 'Luxe Store', 60) || 'Luxe Store';
+  const cleanSku = String(sku || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '')
+    .slice(0, 40);
+  const price = Number(sellingPrice);
+  const hasOriginal =
+    originalPrice !== '' && originalPrice !== null && originalPrice !== undefined;
+  const origPrice = hasOriginal ? Number(originalPrice) : null;
+  const qty =
+    stockQuantity === '' || stockQuantity === null || stockQuantity === undefined
+      ? 0
+      : Number(stockQuantity);
+  const threshold =
+    lowStockThreshold === '' || lowStockThreshold === null || lowStockThreshold === undefined
+      ? 3
+      : Number(lowStockThreshold);
+  const cleanImageUrl = String(mainImageUrl || '').trim().slice(0, 500);
+  const cleanStatus = status === 'inactive' ? 'inactive' : 'active';
+
+  if (cleanName.length < 2) {
+    return { ok: false, error: 'Product name must be at least 2 characters.' };
+  }
+  if (cleanSku.length < 2) {
+    return { ok: false, error: 'SKU must contain at least 2 alphanumeric characters.' };
+  }
+  if (!Number.isFinite(price) || price <= 0 || price > 100000000) {
+    return { ok: false, error: 'Selling price must be a valid ₹ INR amount greater than 0.' };
+  }
+  if (origPrice !== null && (!Number.isFinite(origPrice) || origPrice <= 0 || origPrice > 100000000)) {
+    return { ok: false, error: 'Original MRP must be a valid positive number or left blank.' };
+  }
+  if (!Number.isInteger(qty) || qty < 0 || qty > 100000) {
+    return { ok: false, error: 'Stock quantity must be a whole number between 0 and 100,000.' };
+  }
+  if (!Number.isInteger(threshold) || threshold < 0 || threshold > 10000) {
+    return { ok: false, error: 'Low-stock threshold must be between 0 and 10,000.' };
+  }
+  if (cleanImageUrl && !isSafeAssetImageUrl(cleanImageUrl)) {
+    return { ok: false, error: 'Image URL must be an https:// URL or relative site path.' };
+  }
+
+  const specs = String(specsText || '')
+    .split(/\r?\n|,/)
+    .map((line) => sanitizePlainText(line, 120))
+    .filter(Boolean)
+    .slice(0, 12);
+
+  return {
+    ok: true,
+    data: {
+      name: cleanName,
+      brand: cleanBrand,
+      sku: cleanSku,
+      sellingPrice: Math.round(price * 100) / 100,
+      originalPrice: origPrice !== null ? Math.round(origPrice * 100) / 100 : null,
+      stockQuantity: qty,
+      lowStockThreshold: threshold,
+      shortDescription: sanitizePlainText(shortDescription || '', 260),
+      fullDescription: sanitizePlainText(fullDescription || '', 2000),
+      mainImageUrl: cleanImageUrl || null,
+      status: cleanStatus,
+      specs,
+    },
+  };
+}
+
+export function validateStoreSettingsInput({
+  storeName,
+  upiId,
+  upiDisplayName,
+  upiQrImageUrl,
+  upiPaymentInstructions,
+}) {
+  const cleanStoreName = sanitizePlainText(storeName, 80);
+  const cleanUpiId = String(upiId || '').trim();
+  const cleanDisplayName = sanitizePlainText(upiDisplayName || cleanStoreName, 60);
+  const cleanQrUrl = String(upiQrImageUrl || '').trim().slice(0, 500);
+  const cleanInstructions = sanitizePlainText(upiPaymentInstructions || '', 500);
+
+  if (cleanStoreName.length < 2) {
+    return { ok: false, error: 'Store name must be at least 2 characters.' };
+  }
+  if (cleanUpiId && !/^[a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9.-]{2,32}$/.test(cleanUpiId)) {
+    return { ok: false, error: 'Enter a valid Merchant UPI ID (for example store@ibl).' };
+  }
+  if (cleanQrUrl && !/^https:\/\/[^\s<>]+$/i.test(cleanQrUrl)) {
+    return { ok: false, error: 'Custom QR image URL must be an https:// URL.' };
+  }
+
+  return {
+    ok: true,
+    data: {
+      store_name: cleanStoreName,
+      upi_id: cleanUpiId || null,
+      upi_display_name: cleanDisplayName || cleanStoreName,
+      upi_qr_image_url: cleanQrUrl || null,
+      upi_payment_instructions: cleanInstructions || null,
+    },
+  };
+}
+
+export function csvEscapeCell(value) {
+  let str = String(value ?? '').replace(/\r?\n/g, ' ');
+  // Neutralize spreadsheet formula injection (=, +, -, @, tab)
+  if (/^[=+\-@\t]/.test(str)) {
+    str = `'${str}`;
+  }
+  if (/[",]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+export function buildOrdersCsv(orders = []) {
+  const headers = [
+    'Order Number',
+    'Date',
+    'Customer Name',
+    'Email',
+    'Phone',
+    'Shipping Address',
+    'Items',
+    'Amount (INR)',
+    'Payment Method',
+    'Payment Status',
+    'Delivery Status',
+    'UTR / Reference',
+    'Courier',
+    'Tracking Number',
+  ];
+
+  const rows = (Array.isArray(orders) ? orders : []).map((order) => {
+    const customer = order.customer_snapshot || {};
+    const addr = order.delivery_address_snapshot || {};
+    const addressLine = [
+      addr.house_building,
+      addr.street,
+      addr.city,
+      addr.state,
+      addr.pin_code || addr.postal_code,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const itemsText = (order.order_items || [])
+      .map((li) => `${li.product_name_snapshot || li.sku_snapshot} x${li.quantity}`)
+      .join(' | ');
+
+    return [
+      order.order_number || '',
+      order.created_at || '',
+      customer.full_name || '',
+      customer.email || '',
+      customer.phone || '',
+      addressLine,
+      itemsText,
+      order.final_amount ?? '',
+      order.payment_method || '',
+      order.payment_status || '',
+      order.delivery_status || '',
+      order.payment_reference || '',
+      order.courier_partner || '',
+      order.tracking_number || '',
+    ]
+      .map(csvEscapeCell)
+      .join(',');
+  });
+
+  return [headers.map(csvEscapeCell).join(','), ...rows].join('\n');
+}
+

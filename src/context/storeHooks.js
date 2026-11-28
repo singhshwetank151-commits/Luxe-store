@@ -3,6 +3,7 @@ import { createContext, useContext } from 'react';
 export const RouterContext = createContext(null);
 export const AuthContext = createContext(null);
 export const CartContext = createContext(null);
+export const CatalogContext = createContext(null);
 
 export function useRouter() {
   const ctx = useContext(RouterContext);
@@ -24,6 +25,14 @@ export function useCart() {
   const ctx = useContext(CartContext);
   if (!ctx) {
     throw new Error('useCart must be used within a CartProvider');
+  }
+  return ctx;
+}
+
+export function useCatalog() {
+  const ctx = useContext(CatalogContext);
+  if (!ctx) {
+    throw new Error('useCatalog must be used within a CatalogProvider');
   }
   return ctx;
 }

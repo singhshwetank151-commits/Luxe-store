@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowLeft, Check, Plus } from 'lucide-react';
 import { getDefaultVariant, getProductById } from '../data/catalog';
-import { useCart, useRouter } from '../context/storeHooks';
+import { useCart, useCatalog, useRouter } from '../context/storeHooks';
 import './ProductDetailPage.css';
 
 export function ProductDetailPage({ productId }) {
-  const product = getProductById(productId);
+  const { products } = useCatalog();
+  const product = useMemo(
+    () =>
+      products.find((p) => p.id === productId || p.slug === productId || p.sku === productId) ||
+      getProductById(productId),
+    [products, productId]
+  );
   const { navigate } = useRouter();
   const { addToCart } = useCart();
 

@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { AuthProvider } from './context/AuthContext';
+import { CatalogProvider } from './context/CatalogContext';
 import { CartProvider } from './context/CartContext';
 import { RouterProvider } from './context/RouterContext';
 import { useRouter } from './context/storeHooks';
@@ -69,9 +70,11 @@ function App() {
   return (
     <RouterProvider>
       <AuthProvider>
-        <CartProvider>
-          <AppRoutes />
-        </CartProvider>
+        <CatalogProvider>
+          <CartProvider>
+            <AppRoutes />
+          </CartProvider>
+        </CatalogProvider>
       </AuthProvider>
     </RouterProvider>
   );

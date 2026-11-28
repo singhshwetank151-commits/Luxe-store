@@ -13,16 +13,20 @@ import {
   sanitizeCartItems,
   sanitizePlainText,
   MAX_PROOF_FILE_BYTES,
+  buildOrdersCsv,
   buildSafeUpiIntentUrl,
+  csvEscapeCell,
   validateCheckoutSubmission,
   validateInventoryAdjustment,
   validateOrderLifecycleUpdate,
+  validateProductInput,
   validateProfileInput,
+  validateStoreSettingsInput,
   validateUpiPaymentProof,
   withNetworkGuard,
 } from '../src/lib/security.js';
 import { formatInr, STORE_CURRENCY } from '../src/lib/currency.js';
-import { PRODUCTS } from '../src/data/catalog.js';
+import { PRODUCTS, mapSupabaseProduct, mergeCatalogProducts } from '../src/data/catalog.js';
 
 const sampleProduct = PRODUCTS[0];
 const sampleVariant = sampleProduct.variants[0];
@@ -304,4 +308,133 @@ test('UPI intent URL builder: generates strict INR upi://pay links and rejects u
   assert.equal(buildSafeUpiIntentUrl({ upiId: 'shw2100@ibl', amount: 0 }), '');
   assert.equal(buildSafeUpiIntentUrl({ upiId: 'shw2100@ibl', amount: -500 }), '');
 });
+
+test('Admin product validation: enforces valid INR price, SKU, stock bounds, and safe image URLs', () => {
+  const valid = validateProductInput({
+    name: 'Celestial Skeleton 41mm',
+    brand: 'Luxe Store',
+    sku: 'ls-cel-41',
+    sellingPrice: 24500,
+    originalPrice: 29900,
+    stockQuantity: 8,
+    lowStockThreshold: 2,
+    mainImageUrl: 'https://example.supabase.co/storage/v1/object/public/product-images/watch.png',
+    status: 'active',
+    specsText: 'Movement: Automatic\nCrystal: Sapphire',
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.data.sku, 'LS-CEL-41');
+  assert.equal(valid.data.sellingPrice, 24500);
+  assert.equal(valid.data.specs.length, 2);
+
+  assert.equal(
+    validateProductInput({ name: 'Bad Price', sku: 'LS-1', sellingPrice: -100, stockQuantity: 1 }).ok,
+    false
+  );
+  assert.equal(
+    validateProductInput({
+      name: 'XSS Img',
+      sku: 'LS-2',
+      sellingPrice: 12000,
+      stockQuantity: 1,
+      mainImageUrl: 'javascript:alert(1)',
+    }).ok,
+    false
+  );
+});
+
+test('Admin store settings validation: enforces valid UPI VPA and HTTPS QR image URLs', () => {
+  const valid = validateStoreSettingsInput({
+    storeName: 'TIMESSELLERS',
+    upiId: 'shw2100@ibl',
+    upiDisplayName: 'TIMESSELLERS',
+    upiQrImageUrl: 'https://example.supabase.co/storage/v1/object/public/store-assets/qr.png',
+    upiPaymentInstructions: 'Scan QR and submit 12-digit UTR.',
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.data.upi_id, 'shw2100@ibl');
+
+  assert.equal(
+    validateStoreSettingsInput({ storeName: 'TIMESSELLERS', upiId: 'not-a-vpa' }).ok,
+    false
+  );
+  assert.equal(
+    validateStoreSettingsInput({
+      storeName: 'TIMESSELLERS',
+      upiId: 'shw2100@ibl',
+      upiQrImageUrl: 'javascript:alert(1)',
+    }).ok,
+    false
+  );
+});
+
+test('Orders CSV export: prevents spreadsheet formula injection and formats Indian addresses cleanly', () => {
+  assert.equal(csvEscapeCell('=CMD|"/C calc"!A0'), '"\'=CMD|""/C calc""!A0"');
+  assert.equal(csvEscapeCell('+919876543210'), "'+919876543210");
+
+  const csv = buildOrdersCsv([
+    {
+      order_number: 'LS-20261127-ABCD',
+      created_at: '2026-11-27T10:00:00Z',
+      customer_snapshot: {
+        full_name: '=HYPERLINK("http://evil.com","Click")',
+        email: 'client@example.com',
+        phone: '+91 98765 43210',
+      },
+      delivery_address_snapshot: {
+        street: 'Linking Road, Bandra',
+        city: 'Mumbai',
+        state: 'Maharashtra',
+        postal_code: '400050',
+      },
+      order_items: [{ product_name_snapshot: 'Aurelia 18K Gold', quantity: 1 }],
+      final_amount: 32500,
+      payment_method: 'upi',
+      payment_status: 'confirmed',
+      delivery_status: 'shipped',
+      payment_reference: '423199881234',
+      courier_partner: 'Blue Dart',
+      tracking_number: 'BD123456',
+    },
+  ]);
+
+  assert.ok(csv.includes('Order Number,Date,Customer Name'));
+  assert.ok(csv.includes('"\'=HYPERLINK'));
+  assert.ok(csv.includes('400050'));
+  assert.ok(csv.includes('Aurelia 18K Gold x1'));
+});
+
+test('Live Supabase catalog mapping: maps INR prices and merges cleanly with fallback catalog', () => {
+  const mapped = mapSupabaseProduct({
+    id: 'db-watch-1',
+    name: 'Sovereign Tourbillon Live',
+    slug: 'sovereign-tourbillon-live',
+    sku: 'LS-LIVE-01',
+    brand: 'Luxe Atelier',
+    selling_price: 45000,
+    original_price: 52000,
+    main_image_url: 'https://example.supabase.co/watch.png',
+    status: 'active',
+    categories: { name: 'Haute Horlogerie' },
+    inventory: [{ available_quantity: 4, stock_status: 'in_stock' }],
+  });
+
+  assert.equal(mapped.formattedPrice, '₹45,000');
+  assert.equal(mapped.formattedOriginalPrice, '₹52,000');
+  assert.equal(mapped.source, 'supabase');
+  assert.equal(mapped.variants[0].available, true);
+
+  const merged = mergeCatalogProducts([
+    {
+      id: 'db-watch-1',
+      name: 'Sovereign Tourbillon Live',
+      slug: 'sovereign-tourbillon-live',
+      sku: 'LS-LIVE-01',
+      selling_price: 45000,
+    },
+  ]);
+  assert.equal(merged[0].id, 'db-watch-1');
+  assert.equal(merged.length, PRODUCTS.length + 1);
+});
+
 

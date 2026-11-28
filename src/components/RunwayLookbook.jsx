@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Check, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { RUNWAY_LOOKS } from '../data/runwayLooks';
-import { PRODUCTS, getProductById } from '../data/catalog';
-import { useCart, useRouter } from '../context/storeHooks';
+import { getProductById } from '../data/catalog';
+import { useCart, useCatalog, useRouter } from '../context/storeHooks';
 import './RunwayLookbook.css';
 
-const MAX_LOOKS = 10;
+const MAX_LOOKS = 24;
 
 function getDepthStyle(rawOffset, total, hasScrolled) {
   let offset = ((rawOffset % total) + total) % total;
@@ -57,7 +57,28 @@ function getDepthStyle(rawOffset, total, hasScrolled) {
 }
 
 export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
-  const looks = useMemo(() => (propLooks || RUNWAY_LOOKS).slice(0, MAX_LOOKS), [propLooks]);
+  const { products: catalogProducts } = useCatalog();
+
+  const looks = useMemo(() => {
+    if (propLooks) return propLooks.slice(0, MAX_LOOKS);
+    const liveExtras = catalogProducts
+      .filter((p) => p.source === 'supabase')
+      .map((p, idx) => ({
+        id: `live-look-${p.id}`,
+        lookNumber: String(idx + 1).padStart(2, '0'),
+        title: p.title,
+        modelImage: p.image,
+        modelAlt: p.title,
+        productIds: [p.id],
+      }));
+    const liveSlugs = new Set(catalogProducts.filter((p) => p.source === 'supabase').map((p) => p.slug));
+    const curatedRemaining = RUNWAY_LOOKS.filter((look) => {
+      const prod = getProductById(look.productIds[0]);
+      return prod && !liveSlugs.has(prod.slug);
+    });
+    return [...liveExtras, ...curatedRemaining].slice(0, MAX_LOOKS);
+  }, [propLooks, catalogProducts]);
+
   const totalLooks = looks.length;
 
   const [activeIndex, setActiveIndex] = useState(() =>
@@ -76,16 +97,16 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
   const { navigate } = useRouter();
 
   const mobileCategories = useMemo(
-    () => ['All', ...Array.from(new Set(PRODUCTS.map((p) => p.category)))],
-    []
+    () => ['All', ...Array.from(new Set(catalogProducts.map((p) => p.category)))],
+    [catalogProducts]
   );
 
   const mobileProducts = useMemo(
     () =>
       selectedCategory === 'All'
-        ? PRODUCTS
-        : PRODUCTS.filter((p) => p.category === selectedCategory),
-    [selectedCategory]
+        ? catalogProducts
+        : catalogProducts.filter((p) => p.category === selectedCategory),
+    [catalogProducts, selectedCategory]
   );
 
   // Build full scrollable menu list (1 product per look, 3 visible at once in rail)
