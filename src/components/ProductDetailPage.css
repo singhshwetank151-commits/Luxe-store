@@ -45,7 +45,14 @@
   align-items: center;
 }
 
+.pdp-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .pdp-media {
+  position: relative;
   background-color: var(--surface-deep);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-card);
@@ -62,6 +69,95 @@
   object-fit: contain;
   display: block;
   filter: drop-shadow(0 16px 24px rgba(18, 2, 4, 0.42));
+}
+
+.pdp-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background-color: rgba(45, 5, 10, 0.78);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 160ms var(--ease-out), border-color 160ms var(--ease-out);
+}
+
+.pdp-nav-btn:hover {
+  background-color: var(--text-primary);
+  color: #360409;
+  border-color: var(--text-primary);
+}
+
+.pdp-nav-prev {
+  left: 14px;
+}
+
+.pdp-nav-next {
+  right: 14px;
+}
+
+.pdp-photo-count {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background-color: rgba(45, 5, 10, 0.78);
+  border: 1px solid var(--border-hairline);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.pdp-thumbs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.pdp-thumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.pdp-thumb-btn {
+  width: 68px;
+  height: 68px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background-color: var(--surface-deep);
+  border: 1px solid var(--border-hairline);
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.72;
+  transition: opacity 160ms var(--ease-out), border-color 160ms var(--ease-out);
+}
+
+.pdp-thumb-btn:hover {
+  opacity: 1;
+  border-color: var(--border-strong);
+}
+
+.pdp-thumb-btn.is-active {
+  opacity: 1;
+  border-color: var(--text-primary);
+}
+
+.pdp-thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .pdp-category {

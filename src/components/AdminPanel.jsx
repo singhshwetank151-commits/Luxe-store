@@ -501,7 +501,7 @@ export function AdminPanel() {
             supabase
               .from('products')
               .select(
-                'id, name, slug, sku, category_id, brand, short_description, full_description, selling_price, original_price, main_image_url, status, total_sold, created_at, categories(id, name, slug), inventory(id, available_quantity, low_stock_threshold, stock_status)'
+                'id, name, slug, sku, category_id, brand, short_description, full_description, selling_price, original_price, main_image_url, status, total_sold, created_at, categories(id, name, slug), inventory(id, available_quantity, low_stock_threshold, stock_status), product_images(id, image_url, alt_text, display_order, is_primary)'
               )
               .order('created_at', { ascending: false })
               .limit(80),

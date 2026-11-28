@@ -163,6 +163,29 @@ export function mapSupabaseProduct(row) {
   const slug = row.slug || String(row.id);
   const sku = row.sku || slug.toUpperCase();
   const isAvailable = stockStatus !== 'out_of_stock' && (stockQuantity === null || stockQuantity > 0);
+  const galleryRows = Array.isArray(row.product_images)
+    ? [...row.product_images].sort((a, b) => {
+        if (Boolean(b.is_primary) !== Boolean(a.is_primary)) {
+          return b.is_primary ? 1 : -1;
+        }
+        return (a.display_order ?? 0) - (b.display_order ?? 0);
+      })
+    : [];
+  const orderedImages = [];
+  const seenUrls = new Set();
+  for (const img of galleryRows) {
+    const u = String(img?.image_url || '').trim();
+    if (u && !seenUrls.has(u)) {
+      seenUrls.add(u);
+      orderedImages.push(u);
+    }
+  }
+  const mainUrl = String(row.main_image_url || '').trim();
+  if (mainUrl && !seenUrls.has(mainUrl)) {
+    orderedImages.unshift(mainUrl);
+  }
+  const primaryImage = orderedImages[0] || withBase('/products/watch-silver-skeleton.png');
+  const images = orderedImages.length > 0 ? orderedImages : [primaryImage];
 
   return {
     id: String(row.id),
@@ -179,7 +202,8 @@ export function mapSupabaseProduct(row) {
     formattedPrice: formatInr(price),
     formattedOriginalPrice:
       originalPrice && originalPrice > price ? formatInr(originalPrice) : null,
-    image: row.main_image_url || withBase('/products/watch-silver-skeleton.png'),
+    image: primaryImage,
+    images,
     description:
       row.full_description ||
       row.short_description ||

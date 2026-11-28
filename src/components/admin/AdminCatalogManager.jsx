@@ -1,10 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   Edit3,
   Image as ImageIcon,
   Plus,
   Search,
+  Star,
   Trash2,
   Upload,
   X,
@@ -13,7 +16,9 @@ import { formatInr } from '../../lib/currency';
 import { supabase } from '../../lib/supabase';
 import {
   ALLOWED_PROOF_MIME_TYPES,
+  MAX_PRODUCT_IMAGES,
   MAX_PROOF_FILE_BYTES,
+  isSafeAssetImageUrl,
   slugifyProductName,
   validateInventoryAdjustment,
   validateProductInput,
@@ -35,6 +40,31 @@ function makeSuggestedSku(name) {
   return `LS-${base || 'TIME'}-${suffix}`;
 }
 
+function extractOrderedProductImages(prod) {
+  const rows = Array.isArray(prod?.product_images)
+    ? [...prod.product_images].sort((a, b) => {
+        if (Boolean(b.is_primary) !== Boolean(a.is_primary)) {
+          return b.is_primary ? 1 : -1;
+        }
+        return (a.display_order ?? 0) - (b.display_order ?? 0);
+      })
+    : [];
+  const urls = [];
+  const seen = new Set();
+  for (const img of rows) {
+    const u = String(img?.image_url || '').trim();
+    if (u && !seen.has(u)) {
+      seen.add(u);
+      urls.push(u);
+    }
+  }
+  const main = String(prod?.main_image_url || '').trim();
+  if (main && !seen.has(main)) {
+    urls.unshift(main);
+  }
+  return urls.slice(0, MAX_PRODUCT_IMAGES);
+}
+
 function createEmptyDraft(categories) {
   return {
     id: null,
@@ -48,7 +78,7 @@ function createEmptyDraft(categories) {
     lowStockThreshold: '2',
     shortDescription: '',
     fullDescription: '',
-    mainImageUrl: '',
+    imageUrls: [],
     status: 'active',
     specsText: 'Mechanical Automatic\nSapphire Crystal\n100m Water Resistance',
   };
@@ -63,57 +93,165 @@ function ProductEditorForm({
 }) {
   const isEditing = Boolean(initialDraft?.id);
   const [form, setForm] = useState(initialDraft);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
+
+  const uploadingImage = uploadingCount > 0;
+  const imageUrls = Array.isArray(form.imageUrls) ? form.imageUrls : [];
+  const remainingSlots = Math.max(0, MAX_PRODUCT_IMAGES - imageUrls.length);
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleAddImageUrl = () => {
+    const clean = urlInput.trim();
+    if (!clean) return;
+    if (!isSafeAssetImageUrl(clean)) {
+      setFeedback({ type: 'error', text: 'Photo URL must be an https:// URL or relative path.' });
+      return;
+    }
+    if (imageUrls.includes(clean)) {
+      setUrlInput('');
+      return;
+    }
+    if (imageUrls.length >= MAX_PRODUCT_IMAGES) {
+      setFeedback({ type: 'error', text: `Maximum ${MAX_PRODUCT_IMAGES} photos per timepiece.` });
+      return;
+    }
+    updateField('imageUrls', [...imageUrls, clean]);
+    setUrlInput('');
+  };
+
+  const handleSetPrimary = (index) => {
+    if (index <= 0 || index >= imageUrls.length) return;
+    const next = [...imageUrls];
+    const [picked] = next.splice(index, 1);
+    next.unshift(picked);
+    updateField('imageUrls', next);
+  };
+
+  const handleMovePhoto = (index, delta) => {
+    const target = index + delta;
+    if (target < 0 || target >= imageUrls.length) return;
+    const next = [...imageUrls];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    updateField('imageUrls', next);
+  };
+
+  const handleRemovePhoto = (index) => {
+    updateField(
+      'imageUrls',
+      imageUrls.filter((_, i) => i !== index)
+    );
+  };
+
   const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !supabase) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !supabase) return;
 
-    if (!ALLOWED_PROOF_MIME_TYPES.includes(file.type)) {
-      setFeedback({ type: 'error', text: 'Product image must be JPEG, PNG, or WebP.' });
-      if (fileRef.current) fileRef.current.value = '';
-      return;
-    }
-    if (file.size > MAX_PROOF_FILE_BYTES) {
-      setFeedback({ type: 'error', text: 'Product image must be 5 MB or smaller.' });
+    if (remainingSlots <= 0) {
+      setFeedback({ type: 'error', text: `Maximum ${MAX_PRODUCT_IMAGES} photos per timepiece.` });
       if (fileRef.current) fileRef.current.value = '';
       return;
     }
 
-    setUploadingImage(true);
+    const toUpload = files.slice(0, remainingSlots);
+    const skippedForLimit = files.length - toUpload.length;
+    const validFiles = [];
+
+    for (const file of toUpload) {
+      if (!ALLOWED_PROOF_MIME_TYPES.includes(file.type)) {
+        setFeedback({ type: 'error', text: `${file.name}: only JPEG, PNG, or WebP images are allowed.` });
+        continue;
+      }
+      if (file.size > MAX_PROOF_FILE_BYTES) {
+        setFeedback({ type: 'error', text: `${file.name}: image must be 5 MB or smaller.` });
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) {
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+
+    setUploadingCount(validFiles.length);
+    const uploadedUrls = [];
+    let lastErr = '';
+
     try {
       const slug = slugifyProductName(form.name || form.sku || 'watch') || 'watch';
-      const path = `catalog/${slug}-${Date.now()}.${getExt(file.type)}`;
-      const { error: uploadErr } = await withNetworkGuard(
-        supabase.storage.from('product-images').upload(path, file, {
-          contentType: file.type,
-          upsert: false,
-        }),
-        20000
-      );
-      if (uploadErr) {
-        setFeedback({ type: 'error', text: `Image upload failed: ${uploadErr.message}` });
-        return;
+      const batchTs = Date.now();
+
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        const path = `catalog/${slug}-${batchTs}-${i + 1}.${getExt(file.type)}`;
+        const { error: uploadErr } = await withNetworkGuard(
+          supabase.storage.from('product-images').upload(path, file, {
+            contentType: file.type,
+            upsert: false,
+          }),
+          25000
+        );
+        if (uploadErr) {
+          lastErr = uploadErr.message;
+          continue;
+        }
+        const { data: pub } = supabase.storage.from('product-images').getPublicUrl(path);
+        if (pub?.publicUrl) {
+          uploadedUrls.push(pub.publicUrl);
+        }
       }
-      const { data: pub } = supabase.storage.from('product-images').getPublicUrl(path);
-      if (pub?.publicUrl) {
-        updateField('mainImageUrl', pub.publicUrl);
-        setFeedback({ type: 'success', text: 'Product photo uploaded.' });
+
+      if (uploadedUrls.length > 0) {
+        setForm((prev) => {
+          const prevUrls = Array.isArray(prev.imageUrls) ? prev.imageUrls : [];
+          const merged = [...prevUrls];
+          for (const u of uploadedUrls) {
+            if (!merged.includes(u) && merged.length < MAX_PRODUCT_IMAGES) {
+              merged.push(u);
+            }
+          }
+          return { ...prev, imageUrls: merged };
+        });
+        setFeedback({
+          type: 'success',
+          text:
+            skippedForLimit > 0
+              ? `Uploaded ${uploadedUrls.length} photo${uploadedUrls.length === 1 ? '' : 's'} (${skippedForLimit} skipped due to ${MAX_PRODUCT_IMAGES}-photo limit).`
+              : `Uploaded ${uploadedUrls.length} photo${uploadedUrls.length === 1 ? '' : 's'}.`,
+        });
+      } else if (lastErr) {
+        setFeedback({ type: 'error', text: `Image upload failed: ${lastErr}` });
       }
     } catch (err) {
       setFeedback({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Unable to upload image.',
+        text: err instanceof Error ? err.message : 'Unable to upload photos.',
       });
     } finally {
-      setUploadingImage(false);
+      setUploadingCount(0);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const syncProductImagesTable = async (productId, productName, urls) => {
+    await supabase.from('product_images').delete().eq('product_id', productId);
+    if (urls.length > 0) {
+      await supabase.from('product_images').insert(
+        urls.map((url, idx) => ({
+          product_id: productId,
+          image_url: url,
+          alt_text: `${productName} — view ${idx + 1}`,
+          display_order: idx,
+          is_primary: idx === 0,
+        }))
+      );
     }
   };
 
@@ -121,7 +259,17 @@ function ProductEditorForm({
     e.preventDefault();
     if (!supabase || saving) return;
 
-    const validated = validateProductInput(form);
+    // Auto-include any URL typed in the URL input box before saving
+    const pendingUrl = urlInput.trim();
+    const combinedUrls =
+      pendingUrl && !imageUrls.includes(pendingUrl)
+        ? [...imageUrls, pendingUrl]
+        : imageUrls;
+
+    const validated = validateProductInput({
+      ...form,
+      imageUrls: combinedUrls,
+    });
     if (!validated.ok) {
       setFeedback({ type: 'error', text: validated.error });
       return;
@@ -154,7 +302,8 @@ function ProductEditorForm({
           return;
         }
 
-        // Sync inventory quantity & threshold if changed
+        await syncProductImagesTable(form.id, d.name, d.imageUrls);
+
         const { error: invRpcErr } = await withNetworkGuard(
           supabase.rpc('admin_adjust_inventory', {
             p_product_id: form.id,
@@ -165,7 +314,6 @@ function ProductEditorForm({
           15000
         );
         if (invRpcErr) {
-          // Fallback upsert if inventory row did not exist yet
           await supabase.from('inventory').upsert(
             {
               product_id: form.id,
@@ -177,7 +325,10 @@ function ProductEditorForm({
           );
         }
 
-        setFeedback({ type: 'success', text: `${d.name} updated and synced to storefront.` });
+        setFeedback({
+          type: 'success',
+          text: `${d.name} updated with ${d.imageUrls.length} photo${d.imageUrls.length === 1 ? '' : 's'}.`,
+        });
         onSaved();
         return;
       }
@@ -225,15 +376,7 @@ function ProductEditorForm({
         low_stock_threshold: d.lowStockThreshold,
       });
 
-      if (d.mainImageUrl) {
-        await supabase.from('product_images').insert({
-          product_id: productId,
-          image_url: d.mainImageUrl,
-          alt_text: d.name,
-          display_order: 0,
-          is_primary: true,
-        });
-      }
+      await syncProductImagesTable(productId, d.name, d.imageUrls);
 
       if (d.specs.length > 0) {
         await supabase.from('product_specifications').insert(
@@ -252,7 +395,10 @@ function ProductEditorForm({
         );
       }
 
-      setFeedback({ type: 'success', text: `${d.name} added to catalog.` });
+      setFeedback({
+        type: 'success',
+        text: `${d.name} added to catalog with ${d.imageUrls.length} photo${d.imageUrls.length === 1 ? '' : 's'}.`,
+      });
       onSaved();
     } catch (err) {
       setFeedback({
@@ -392,53 +538,124 @@ function ProductEditorForm({
           />
         </label>
 
+        {/* MULTI-PHOTO GALLERY MANAGER */}
         <div className="adm-field adm-full-span">
-          <span>Product photo (upload JPEG / PNG / WebP or paste https:// URL)</span>
-          <div className="adm-media-row">
-            <div className="adm-media-thumb">
-              {form.mainImageUrl ? (
-                <img src={form.mainImageUrl} alt={form.name || 'Watch preview'} />
-              ) : (
-                <ImageIcon size={20} strokeWidth={1.5} />
-              )}
-            </div>
-            <div className="adm-media-controls">
+          <span>
+            Product photos ({imageUrls.length} / {MAX_PRODUCT_IMAGES}) — first photo is the main cover
+          </span>
+
+          <div className="adm-gallery-controls">
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              className="adm-hidden-file"
+              onChange={handleImageUpload}
+            />
+            <button
+              type="button"
+              className="adm-secondary-btn"
+              disabled={uploadingImage || remainingSlots <= 0}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload size={15} strokeWidth={1.5} />
+              <span>
+                {uploadingImage
+                  ? `Uploading ${uploadingCount} photo${uploadingCount === 1 ? '' : 's'}...`
+                  : remainingSlots <= 0
+                  ? 'Max photos reached'
+                  : 'Upload photos'}
+              </span>
+            </button>
+
+            <div className="adm-url-add-group">
               <input
                 type="url"
                 maxLength={500}
-                placeholder="https://... or upload below"
-                value={form.mainImageUrl}
-                onChange={(e) => updateField('mainImageUrl', e.target.value)}
+                placeholder="Or paste https:// photo URL..."
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddImageUrl();
+                  }
+                }}
               />
-              <div className="adm-media-btns">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="adm-hidden-file"
-                  onChange={handleImageUpload}
-                />
-                <button
-                  type="button"
-                  className="adm-secondary-btn"
-                  disabled={uploadingImage}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Upload size={15} strokeWidth={1.5} />
-                  <span>{uploadingImage ? 'Uploading...' : 'Upload photo'}</span>
-                </button>
-                {form.mainImageUrl && (
-                  <button
-                    type="button"
-                    className="adm-secondary-btn"
-                    onClick={() => updateField('mainImageUrl', '')}
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
+              <button
+                type="button"
+                className="adm-secondary-btn"
+                disabled={!urlInput.trim() || remainingSlots <= 0}
+                onClick={handleAddImageUrl}
+              >
+                <Plus size={15} strokeWidth={1.5} />
+                <span>Add URL</span>
+              </button>
             </div>
           </div>
+
+          {imageUrls.length > 0 ? (
+            <div className="adm-gallery-grid">
+              {imageUrls.map((url, idx) => (
+                <div
+                  key={`${url}-${idx}`}
+                  className={`adm-gallery-tile ${idx === 0 ? 'is-cover' : ''}`}
+                >
+                  <div className="adm-gallery-thumb">
+                    <img src={url} alt={`${form.name || 'Watch'} view ${idx + 1}`} />
+                    {idx === 0 && <span className="adm-cover-tag">Cover</span>}
+                    <button
+                      type="button"
+                      className="adm-tile-remove"
+                      aria-label={`Remove photo ${idx + 1}`}
+                      onClick={() => handleRemovePhoto(idx)}
+                    >
+                      <X size={13} strokeWidth={1.75} />
+                    </button>
+                  </div>
+
+                  <div className="adm-gallery-tile-actions">
+                    <button
+                      type="button"
+                      className="adm-mini-btn"
+                      aria-label="Move photo left"
+                      disabled={idx === 0}
+                      onClick={() => handleMovePhoto(idx, -1)}
+                    >
+                      <ChevronLeft size={14} strokeWidth={1.5} />
+                    </button>
+                    {idx > 0 ? (
+                      <button
+                        type="button"
+                        className="adm-mini-btn adm-mini-cover"
+                        onClick={() => handleSetPrimary(idx)}
+                      >
+                        <Star size={12} strokeWidth={1.5} />
+                        <span>Cover</span>
+                      </button>
+                    ) : (
+                      <span className="adm-mini-label">Main</span>
+                    )}
+                    <button
+                      type="button"
+                      className="adm-mini-btn"
+                      aria-label="Move photo right"
+                      disabled={idx === imageUrls.length - 1}
+                      onClick={() => handleMovePhoto(idx, 1)}
+                    >
+                      <ChevronRight size={14} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="adm-gallery-empty">
+              <ImageIcon size={18} strokeWidth={1.5} />
+              <span>Select multiple JPEG, PNG, or WebP files at once to build this watch&apos;s photo gallery.</span>
+            </div>
+          )}
         </div>
 
         <label className="adm-field adm-full-span">
@@ -482,6 +699,7 @@ function ProductCatalogCard({
   setFeedback,
 }) {
   const inv = Array.isArray(product.inventory) ? product.inventory[0] : product.inventory;
+  const photos = extractOrderedProductImages(product);
   const [qty, setQty] = useState(String(inv?.available_quantity ?? 0));
   const [threshold, setThreshold] = useState(String(inv?.low_stock_threshold ?? 3));
   const [notes, setNotes] = useState('');
@@ -600,8 +818,8 @@ function ProductCatalogCard({
       <div className="adm-list-card-top">
         <div className="adm-prod-card-head">
           <div className="adm-prod-thumb">
-            {product.main_image_url ? (
-              <img src={product.main_image_url} alt={product.name} />
+            {photos[0] ? (
+              <img src={photos[0]} alt={product.name} />
             ) : (
               <ImageIcon size={18} strokeWidth={1.5} />
             )}
@@ -621,6 +839,9 @@ function ProductCatalogCard({
               </span>
               <span className={`adm-pill adm-pill-${product.status || 'active'}`}>
                 {product.status || 'active'}
+              </span>
+              <span className="adm-pill">
+                {photos.length} {photos.length === 1 ? 'photo' : 'photos'}
               </span>
               {Number(product.total_sold || 0) > 0 && (
                 <span className="adm-pill">{product.total_sold} sold</span>
@@ -765,7 +986,7 @@ export function AdminCatalogManager({
       lowStockThreshold: String(inv?.low_stock_threshold ?? 3),
       shortDescription: prod.short_description || '',
       fullDescription: prod.full_description || '',
-      mainImageUrl: prod.main_image_url || '',
+      imageUrls: extractOrderedProductImages(prod),
       status: prod.status || 'active',
       specsText: '',
     });
@@ -832,9 +1053,10 @@ export function AdminCatalogManager({
       <div className="adm-stack">
         {filteredProducts.map((prod) => {
           const inv = Array.isArray(prod.inventory) ? prod.inventory[0] : prod.inventory;
+          const photoCount = extractOrderedProductImages(prod).length;
           return (
             <ProductCatalogCard
-              key={`${prod.id}-${prod.status}-${prod.selling_price}-${inv?.available_quantity ?? 0}`}
+              key={`${prod.id}-${prod.status}-${prod.selling_price}-${inv?.available_quantity ?? 0}-${photoCount}`}
               product={prod}
               onEdit={handleOpenEdit}
               onUpdated={onUpdated}

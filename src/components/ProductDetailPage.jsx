@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Check, Plus } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { getDefaultVariant, getProductById } from '../data/catalog';
 import { useCart, useCatalog, useRouter } from '../context/storeHooks';
 import './ProductDetailPage.css';
@@ -17,7 +17,16 @@ export function ProductDetailPage({ productId }) {
 
   const defaultVariant = getDefaultVariant(product);
   const [selectedVariantId, setSelectedVariantId] = useState(defaultVariant?.id || '');
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [added, setAdded] = useState(false);
+
+  const galleryImages = useMemo(() => {
+    if (!product) return [];
+    if (Array.isArray(product.images) && product.images.length > 0) {
+      return product.images;
+    }
+    return product.image ? [product.image] : [];
+  }, [product]);
 
   if (!product) {
     return (
@@ -32,6 +41,18 @@ export function ProductDetailPage({ productId }) {
       </main>
     );
   }
+
+  const safeImageIndex =
+    galleryImages.length > 0 ? Math.min(activeImageIndex, galleryImages.length - 1) : 0;
+  const currentImage = galleryImages[safeImageIndex] || product.image;
+  const hasMultipleImages = galleryImages.length > 1;
+
+  const stepImage = (delta) => {
+    if (galleryImages.length <= 1) return;
+    setActiveImageIndex(
+      (prev) => (prev + delta + galleryImages.length) % galleryImages.length
+    );
+  };
 
   const handleAdd = () => {
     const res = addToCart(product.id, selectedVariantId);
@@ -50,8 +71,69 @@ export function ProductDetailPage({ productId }) {
         </button>
 
         <div className="pdp-grid">
-          <div className="pdp-media">
-            <img src={product.image} alt={product.title} className="pdp-img" />
+          <div className="pdp-gallery">
+            <div
+              className="pdp-media"
+              tabIndex={hasMultipleImages ? 0 : undefined}
+              onKeyDown={(e) => {
+                if (!hasMultipleImages) return;
+                if (e.key === 'ArrowRight') {
+                  e.preventDefault();
+                  stepImage(1);
+                } else if (e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  stepImage(-1);
+                }
+              }}
+            >
+              <img
+                src={currentImage}
+                alt={`${product.title}${hasMultipleImages ? ` — photo ${safeImageIndex + 1} of ${galleryImages.length}` : ''}`}
+                className="pdp-img"
+              />
+
+              {hasMultipleImages && (
+                <>
+                  <button
+                    type="button"
+                    className="pdp-nav-btn pdp-nav-prev"
+                    aria-label="Previous photo"
+                    onClick={() => stepImage(-1)}
+                  >
+                    <ChevronLeft size={18} strokeWidth={1.5} />
+                  </button>
+                  <button
+                    type="button"
+                    className="pdp-nav-btn pdp-nav-next"
+                    aria-label="Next photo"
+                    onClick={() => stepImage(1)}
+                  >
+                    <ChevronRight size={18} strokeWidth={1.5} />
+                  </button>
+                  <span className="pdp-photo-count" aria-live="polite">
+                    {safeImageIndex + 1} / {galleryImages.length}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {hasMultipleImages && (
+              <div className="pdp-thumbs" role="tablist" aria-label="Product photos">
+                {galleryImages.map((imgUrl, idx) => (
+                  <button
+                    key={`${imgUrl}-${idx}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={idx === safeImageIndex}
+                    aria-label={`View photo ${idx + 1}`}
+                    className={`pdp-thumb-btn ${idx === safeImageIndex ? 'is-active' : ''}`}
+                    onClick={() => setActiveImageIndex(idx)}
+                  >
+                    <img src={imgUrl} alt={`${product.title} thumbnail ${idx + 1}`} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pdp-info">

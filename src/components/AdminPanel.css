@@ -1128,3 +1128,157 @@
   }
 }
 
+/* Multi-Photo Gallery Manager in Admin Catalog */
+.adm-gallery-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.adm-url-add-group {
+  display: flex;
+  flex: 1;
+  min-width: 240px;
+  gap: 8px;
+}
+
+.adm-url-add-group input {
+  flex: 1;
+  min-width: 0;
+}
+
+.adm-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
+}
+
+.adm-gallery-tile {
+  background-color: var(--bg-page);
+  border: 1px solid var(--border-hairline);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.adm-gallery-tile.is-cover {
+  border-color: rgba(255, 240, 220, 0.55);
+}
+
+.adm-gallery-thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background-color: rgba(34, 3, 6, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.adm-gallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.adm-cover-tag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background-color: #fff0dc;
+  color: #360409;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.adm-tile-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background-color: rgba(34, 3, 6, 0.85);
+  border: 1px solid rgba(255, 240, 220, 0.25);
+  color: #fff0dc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.adm-tile-remove:hover {
+  background-color: #f52b30;
+  border-color: #f52b30;
+}
+
+.adm-gallery-tile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 6px;
+  border-top: 1px solid rgba(255, 240, 220, 0.08);
+}
+
+.adm-mini-btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255, 240, 220, 0.06);
+  border: 1px solid rgba(255, 240, 220, 0.14);
+  color: #fff0dc;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.adm-mini-btn:hover:not(:disabled) {
+  background: rgba(255, 240, 220, 0.16);
+}
+
+.adm-mini-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.adm-mini-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.adm-gallery-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 240, 220, 0.22);
+  background-color: rgba(255, 240, 220, 0.03);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+@media (max-width: 767px) {
+  .adm-url-add-group {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .adm-gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+

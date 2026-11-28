@@ -483,5 +483,64 @@ test('Admin login brute-force protection: applies progressive cooldowns after 3,
   assert.equal(evaluateAdminLoginLockout(state, t0 + 90_000 + 301_000).locked, false);
 });
 
+test('Multi-photo product gallery: validates up to 8 safe URLs and orders primary photo first', () => {
+  const valid = validateProductInput({
+    name: 'Chronograph Multi-View',
+    sku: 'LS-MV-01',
+    sellingPrice: 19500,
+    stockQuantity: 3,
+    imageUrls: [
+      'https://example.supabase.co/watch-front.png',
+      'https://example.supabase.co/watch-back.png',
+      'https://example.supabase.co/watch-front.png', // Duplicate deduped
+    ],
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.data.imageUrls.length, 2);
+  assert.equal(valid.data.mainImageUrl, 'https://example.supabase.co/watch-front.png');
+
+  // Exceeding 8 photos rejected
+  const tooMany = validateProductInput({
+    name: 'Too Many Photos',
+    sku: 'LS-MV-02',
+    sellingPrice: 19500,
+    stockQuantity: 3,
+    imageUrls: Array.from({ length: 9 }, (_, i) => `https://example.supabase.co/p-${i}.png`),
+  });
+  assert.equal(tooMany.ok, false);
+
+  // Unsafe URL in gallery rejected
+  const unsafe = validateProductInput({
+    name: 'Bad Gallery',
+    sku: 'LS-MV-03',
+    sellingPrice: 19500,
+    stockQuantity: 3,
+    imageUrls: ['https://example.supabase.co/ok.png', 'javascript:alert(1)'],
+  });
+  assert.equal(unsafe.ok, false);
+
+  // mapSupabaseProduct sorts primary first, then display_order ascending
+  const mapped = mapSupabaseProduct({
+    id: 'multi-1',
+    name: 'Multi View Watch',
+    slug: 'multi-view-watch',
+    sku: 'LS-MV-01',
+    selling_price: 19500,
+    main_image_url: 'https://example.supabase.co/front.png',
+    product_images: [
+      { image_url: 'https://example.supabase.co/clasp.png', display_order: 2, is_primary: false },
+      { image_url: 'https://example.supabase.co/front.png', display_order: 1, is_primary: true },
+      { image_url: 'https://example.supabase.co/side.png', display_order: 1, is_primary: false },
+    ],
+  });
+  assert.deepEqual(mapped.images, [
+    'https://example.supabase.co/front.png',
+    'https://example.supabase.co/side.png',
+    'https://example.supabase.co/clasp.png',
+  ]);
+  assert.equal(mapped.image, 'https://example.supabase.co/front.png');
+});
+
+
 
 

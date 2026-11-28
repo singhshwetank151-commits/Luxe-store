@@ -513,6 +513,8 @@ export function slugifyProductName(value) {
     .slice(0, 64);
 }
 
+export const MAX_PRODUCT_IMAGES = 8;
+
 export function validateProductInput({
   name,
   brand,
@@ -524,6 +526,7 @@ export function validateProductInput({
   shortDescription,
   fullDescription,
   mainImageUrl,
+  imageUrls,
   status,
   specsText,
 }) {
@@ -546,7 +549,28 @@ export function validateProductInput({
     lowStockThreshold === '' || lowStockThreshold === null || lowStockThreshold === undefined
       ? 3
       : Number(lowStockThreshold);
-  const cleanImageUrl = String(mainImageUrl || '').trim().slice(0, 500);
+  const rawImageCandidates = Array.isArray(imageUrls)
+    ? imageUrls
+    : mainImageUrl
+    ? [mainImageUrl]
+    : [];
+  const cleanedImages = [];
+  const seenImages = new Set();
+  for (const rawUrl of rawImageCandidates) {
+    const trimmed = String(rawUrl || '').trim().slice(0, 500);
+    if (!trimmed) continue;
+    if (!isSafeAssetImageUrl(trimmed)) {
+      return { ok: false, error: 'Every image URL must be an https:// URL or relative site path.' };
+    }
+    if (!seenImages.has(trimmed)) {
+      seenImages.add(trimmed);
+      cleanedImages.push(trimmed);
+    }
+  }
+  if (cleanedImages.length > MAX_PRODUCT_IMAGES) {
+    return { ok: false, error: `A product can have at most ${MAX_PRODUCT_IMAGES} photos.` };
+  }
+  const cleanImageUrl = cleanedImages[0] || '';
   const cleanStatus = status === 'inactive' ? 'inactive' : 'active';
 
   if (cleanName.length < 2) {
@@ -566,9 +590,6 @@ export function validateProductInput({
   }
   if (!Number.isInteger(threshold) || threshold < 0 || threshold > 10000) {
     return { ok: false, error: 'Low-stock threshold must be between 0 and 10,000.' };
-  }
-  if (cleanImageUrl && !isSafeAssetImageUrl(cleanImageUrl)) {
-    return { ok: false, error: 'Image URL must be an https:// URL or relative site path.' };
   }
 
   const specs = String(specsText || '')
@@ -590,6 +611,7 @@ export function validateProductInput({
       shortDescription: sanitizePlainText(shortDescription || '', 260),
       fullDescription: sanitizePlainText(fullDescription || '', 2000),
       mainImageUrl: cleanImageUrl || null,
+      imageUrls: cleanedImages,
       status: cleanStatus,
       specs,
     },
