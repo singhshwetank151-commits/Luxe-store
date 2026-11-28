@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getDefaultVariant, getProductById } from '../data/catalog';
+import { trackProductEvent } from '../lib/analytics';
 import { CartContext, useAuth } from './storeHooks';
 import {
   calculateAuthoritativeCartTotals,
@@ -87,6 +88,7 @@ function ScopedCartProvider({ storageKey, children }) {
         return { ok: false, error: limitError };
       }
 
+      trackProductEvent(product, 'add_to_cart');
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Unable to add item to cart.' };

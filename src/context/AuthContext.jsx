@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { withBase } from '../lib/basePath';
 import { isSupabaseConfigured, supabase, supabaseKey, supabaseUrl } from '../lib/supabase';
 import { AuthContext } from './storeHooks';
+import { linkVisitorToSignedInUser, setTrackingAdminMode } from '../lib/analytics';
 import {
   ALLOWED_FINISH_OPTIONS,
   normalizePhoneDigits,
@@ -88,6 +89,10 @@ export function AuthProvider({ children }) {
 
     const resolvedRole = isAdminFlag === true ? elevatedRole : 'customer';
     const mapped = buildUserState(authUser, profileRow, { role: resolvedRole });
+    setTrackingAdminMode(Boolean(mapped?.isAdmin));
+    if (mapped && !mapped.isAdmin) {
+      linkVisitorToSignedInUser(mapped.id);
+    }
     setUser(mapped);
     setAuthLoading(false);
     return mapped;
@@ -375,6 +380,7 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   const signOut = useCallback(async () => {
+    setTrackingAdminMode(false);
     if (supabase) {
       await supabase.auth.signOut().catch(() => undefined);
     }

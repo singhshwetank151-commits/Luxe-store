@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { getDefaultVariant, getProductById } from '../data/catalog';
 import { useCart, useCatalog, useRouter } from '../context/storeHooks';
+import { flushProductViewDuration, trackProductEvent } from '../lib/analytics';
 import './ProductDetailPage.css';
 
 export function ProductDetailPage({ productId }) {
@@ -19,6 +20,57 @@ export function ProductDetailPage({ productId }) {
   const [selectedVariantId, setSelectedVariantId] = useState(defaultVariant?.id || '');
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [added, setAdded] = useState(false);
+
+  // Track product view + real visible dwell time (pauses when tab is hidden)
+  useEffect(() => {
+    if (!product) return undefined;
+
+    let cancelled = false;
+    let viewId = null;
+    let accumulatedMs = 0;
+    let visibleSince = document.visibilityState === 'visible' ? Date.now() : null;
+
+    const getElapsedSeconds = () => {
+      const liveMs = visibleSince !== null ? Date.now() - visibleSince : 0;
+      return Math.round((accumulatedMs + liveMs) / 1000);
+    };
+
+    const flush = () => {
+      if (!viewId) return;
+      const secs = getElapsedSeconds();
+      if (secs >= 1) {
+        flushProductViewDuration(viewId, secs);
+      }
+    };
+
+    trackProductEvent(product, 'product_view').then((id) => {
+      if (!cancelled) {
+        viewId = id;
+      }
+    });
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (visibleSince !== null) {
+          accumulatedMs += Date.now() - visibleSince;
+          visibleSince = null;
+        }
+        flush();
+      } else {
+        visibleSince = Date.now();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', flush);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [product]);
 
   const galleryImages = useMemo(() => {
     if (!product) return [];

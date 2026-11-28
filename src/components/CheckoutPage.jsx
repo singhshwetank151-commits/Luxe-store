@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth, useCart, useRouter } from '../context/storeHooks';
+import { trackProductEvent } from '../lib/analytics';
 import { formatInr } from '../lib/currency';
 import { isSupabaseConfigured, supabase, supabaseUrl } from '../lib/supabase';
 import {
@@ -93,7 +94,17 @@ function ScopedCheckoutPage({ user, isAuthenticated }) {
 
   const submitLockRef = useRef(false);
   const proofLockRef = useRef(false);
+  const checkoutTrackedRef = useRef(false);
   const fileInputRef = useRef(null);
+
+  // Record high-intent checkout_start event once when customer opens checkout with items
+  useEffect(() => {
+    if (checkoutTrackedRef.current || items.length === 0) return;
+    checkoutTrackedRef.current = true;
+    for (const item of items.slice(0, 5)) {
+      trackProductEvent(item, 'checkout_start');
+    }
+  }, [items]);
 
   // Load live merchant UPI settings from Supabase store_settings
   useEffect(() => {

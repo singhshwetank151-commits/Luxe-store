@@ -34,6 +34,11 @@ import {
 } from '../src/lib/adminRoute.js';
 import { formatInr, STORE_CURRENCY } from '../src/lib/currency.js';
 import { PRODUCTS, mapSupabaseProduct, mergeCatalogProducts } from '../src/data/catalog.js';
+import {
+  aggregateProductViews,
+  buildTrackingCsv,
+  formatDurationCompact,
+} from '../src/lib/trackingSummary.js';
 
 const sampleProduct = PRODUCTS[0];
 const sampleVariant = sampleProduct.variants[0];
@@ -540,6 +545,104 @@ test('Multi-photo product gallery: validates up to 8 safe URLs and orders primar
   ]);
   assert.equal(mapped.image, 'https://example.supabase.co/front.png');
 });
+
+test('Visitor & product tracking aggregation: counts visits per person/product, detects hot leads, and exports safe CSV', () => {
+  assert.equal(formatDurationCompact(45), '45s');
+  assert.equal(formatDurationCompact(135), '2m 15s');
+
+  const sampleRows = [
+    {
+      id: '1',
+      visitor_id: 'v_abc12345',
+      user_id: 'user-1',
+      viewer_name: 'Aarav Mehta',
+      viewer_email: 'aarav@example.com',
+      product_id: 'watch-gold',
+      product_title: 'Aurelia 18K Gold Skeleton',
+      product_price: 32500,
+      event_type: 'product_view',
+      duration_seconds: 65,
+      device_type: 'mobile',
+      referrer_host: 'instagram.com',
+      viewed_at: '2026-11-28T01:00:00Z',
+    },
+    {
+      id: '2',
+      visitor_id: 'v_abc12345',
+      user_id: 'user-1',
+      viewer_name: 'Aarav Mehta',
+      viewer_email: 'aarav@example.com',
+      product_id: 'watch-gold',
+      product_title: 'Aurelia 18K Gold Skeleton',
+      product_price: 32500,
+      event_type: 'product_view',
+      duration_seconds: 40,
+      device_type: 'mobile',
+      referrer_host: 'instagram.com',
+      viewed_at: '2026-11-28T01:10:00Z',
+    },
+    {
+      id: '3',
+      visitor_id: 'v_abc12345',
+      user_id: 'user-1',
+      viewer_name: 'Aarav Mehta',
+      viewer_email: 'aarav@example.com',
+      product_id: 'watch-gold',
+      product_title: 'Aurelia 18K Gold Skeleton',
+      product_price: 32500,
+      event_type: 'add_to_cart',
+      duration_seconds: 0,
+      device_type: 'mobile',
+      referrer_host: 'instagram.com',
+      viewed_at: '2026-11-28T01:11:00Z',
+    },
+    {
+      id: '4',
+      visitor_id: 'v_guest999',
+      user_id: null,
+      viewer_name: null,
+      viewer_email: null,
+      product_id: 'watch-silver',
+      product_title: 'Sovereign Silver Skeleton',
+      product_price: 14800,
+      event_type: 'product_view',
+      duration_seconds: 15,
+      device_type: 'desktop',
+      referrer_host: 'google.com',
+      viewed_at: '2026-11-28T01:05:00Z',
+    },
+  ];
+
+  const { summary, people, products } = aggregateProductViews(sampleRows);
+  assert.equal(summary.totalProductViews, 3);
+  assert.equal(summary.uniquePeople, 2);
+  assert.equal(summary.identifiedPeople, 1);
+  assert.equal(summary.hotLeadsCount, 1);
+  assert.equal(summary.avgDwellSeconds, 40);
+
+  // Aarav should be first (hot lead) with 2 visits + 105s dwell + addedToCart
+  assert.equal(people[0].name, 'Aarav Mehta');
+  assert.equal(people[0].isHotLead, true);
+  assert.equal(people[0].products[0].visitCount, 2);
+  assert.equal(people[0].products[0].totalDurationSeconds, 105);
+  assert.equal(people[0].products[0].addedToCart, true);
+
+  // Guest visitor tracked cleanly
+  assert.equal(people[1].isIdentified, false);
+  assert.equal(people[1].products[0].visitCount, 1);
+
+  // Product summary ranks watch-gold first with 1 repeat viewer
+  assert.equal(products[0].productId, 'watch-gold');
+  assert.equal(products[0].totalViews, 2);
+  assert.equal(products[0].repeatViewers, 1);
+  assert.equal(products[0].addToCartCount, 1);
+
+  const csv = buildTrackingCsv(people);
+  assert.ok(csv.includes('Person,Email,Phone,Account Type'));
+  assert.ok(csv.includes('Aarav Mehta,aarav@example.com'));
+  assert.ok(csv.includes('Aurelia 18K Gold Skeleton,2,105,Yes,No'));
+});
+
 
 
 

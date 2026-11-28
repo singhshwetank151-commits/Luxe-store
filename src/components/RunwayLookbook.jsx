@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Check, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { RUNWAY_LOOKS } from '../data/runwayLooks';
 import { getProductById } from '../data/catalog';
+import { trackProductEvent } from '../lib/analytics';
 import { useCart, useCatalog, useRouter } from '../context/storeHooks';
 import './RunwayLookbook.css';
 
@@ -191,6 +192,17 @@ export function RunwayLookbook({ looks: propLooks, initialIndex = 0 }) {
 
   const activeLook = looks[activeIndex] || looks[0];
   const featuredProduct = activeLook ? getProductById(activeLook.productIds[0]) : null;
+
+  // Record a Collection showcase focus view when shopper lingers >= 2.5s on a watch
+  useEffect(() => {
+    if (!featuredProduct) return undefined;
+    const id = window.setTimeout(() => {
+      if (document.visibilityState === 'visible') {
+        trackProductEvent(featuredProduct, 'lookbook_focus');
+      }
+    }, 2500);
+    return () => window.clearTimeout(id);
+  }, [featuredProduct]);
 
   const handleAddProduct = (e, product) => {
     e.stopPropagation();

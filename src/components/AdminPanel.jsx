@@ -42,6 +42,7 @@ import {
 } from '../lib/security';
 import { AdminCatalogManager } from './admin/AdminCatalogManager';
 import { AdminStoreSettings } from './admin/AdminStoreSettings';
+import { AdminTrackingPanel } from './admin/AdminTrackingPanel';
 import './AdminPanel.css';
 
 const LOCKOUT_STORAGE_KEY = 'luxe_ops_auth_guard_v1';
@@ -76,6 +77,7 @@ const TABS = [
   { id: 'overview', label: 'Overview', icon: Activity },
   { id: 'orders', label: 'Orders', icon: ClipboardList },
   { id: 'verifications', label: 'UPI Proofs', icon: ShieldCheck },
+  { id: 'tracking', label: 'Tracking', icon: Eye },
   { id: 'catalog', label: 'Products & Stock', icon: Package },
   { id: 'settings', label: 'Store & UPI', icon: Settings },
   { id: 'audit', label: 'Clients & Audit', icon: Users },
@@ -321,6 +323,8 @@ export function AdminPanel() {
   const [storeSettings, setStoreSettings] = useState(null);
   const [clients, setClients] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [productViews, setProductViews] = useState([]);
+  const [trackingSetupNeeded, setTrackingSetupNeeded] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [busyActionKey, setBusyActionKey] = useState('');
   const [feedback, setFeedback] = useState(null);
@@ -481,6 +485,7 @@ export function AdminPanel() {
           profilesRes,
           rolesRes,
           auditRes,
+          viewsRes,
         ] = await withNetworkGuard(
           Promise.all([
             supabase.rpc('admin_get_dashboard_analytics'),
@@ -525,6 +530,13 @@ export function AdminPanel() {
               .select('id, admin_user_id, action, entity_type, entity_id, created_at')
               .order('created_at', { ascending: false })
               .limit(30),
+            supabase
+              .from('product_views')
+              .select(
+                'id, visitor_id, user_id, viewer_name, viewer_email, product_id, product_slug, product_title, product_price, event_type, duration_seconds, device_type, referrer_host, page_path, viewed_at'
+              )
+              .order('viewed_at', { ascending: false })
+              .limit(500),
           ]),
           15000
         );
@@ -549,6 +561,14 @@ export function AdminPanel() {
         if (productsRes.data) setAdminProducts(productsRes.data);
         if (categoriesRes.data) setCategories(categoriesRes.data);
         if (settingsRes.data) setStoreSettings(settingsRes.data);
+
+        if (viewsRes.error) {
+          setTrackingSetupNeeded(true);
+          setProductViews([]);
+        } else {
+          setTrackingSetupNeeded(false);
+          setProductViews(viewsRes.data || []);
+        }
 
         if (profilesRes.data) {
           const roleMap = new Map();
@@ -1562,7 +1582,17 @@ export function AdminPanel() {
           </section>
         )}
 
-        {/* TAB 4: PRODUCTS & STOCK */}
+        {/* TAB 4: VISITOR & PRODUCT TRACKING */}
+        {activeTab === 'tracking' && (
+          <AdminTrackingPanel
+            views={productViews}
+            clients={clients}
+            setupRequired={trackingSetupNeeded}
+            setFeedback={setFeedback}
+          />
+        )}
+
+        {/* TAB 5: PRODUCTS & STOCK */}
         {activeTab === 'catalog' && (
           <AdminCatalogManager
             key={`catalog-${catalogFilterJump}-${autoOpenCreateProduct ? 'new' : 'list'}`}
